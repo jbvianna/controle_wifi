@@ -1,0 +1,39 @@
+/* CSS para Aplicativos - João Vianna (jvianna@gmail.com) */
+/* Tamanhos e alinhamentos */
+body {
+  margin: 0 auto;
+  line-height: 1.2;
+  font-family: Helvetica, Arial, sans-serif;
+  font-size: 2vw;
+  color: #000000;
+  background-color: #f0f0f0; }
+
+main { margin-left:1em; margin-right:1em; }
+
+h1, h2, h3, h4, h5, h6 { page-break-after: avoid; }
+
+h1 { text-align: center; font-size:8vw; font-weight: bold; margin-top: 1.5vw; margin-bottom: 0.8vw; }
+
+h2 { text-align: left; font-size:6vw; font-weight: bold; margin-top: 1.2vw; margin-bottom: 0.6vw; }
+
+h3 { text-align: left; font-size:5vw; font-weight: bold; margin-top: 1vw; margin-bottom: 0.4vw; }
+
+h4 { text-align: left; font-size:4vw; font-weight: bold; margin-top: 0.8vw; margin-bottom: 0.4vw; }
+
+h5 { text-align: left; font-size:3vw; font-weight: bold; margin-top: 0.5vw; margin-bottom: 0.3vw; }
+
+h6 { text-align: left; font-size:2.5vw; font-weight: normal; margin-top: 0.5vw; margin-bottom: 0.3vw; }
+
+p { text-align: left; margin-bottom: 0.1em; font-size: 2vw; font-weight: normal; }
+
+input { font-size: 2vw; font-weight: normal; }
+
+select { font-size: 2vw; font-weight: normal; }
+
+option { font-size: 2vw; font-weight: normal; }
+
+th { font-size: 1.5vw; font-weight: bold; }
+
+td { font-size: 1.5vw; font-weight: normal; border: 1px solid; }
+
+textarea { font-size: 1.5vw; font-weight: normal; }
