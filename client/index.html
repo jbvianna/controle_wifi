@@ -1,0 +1,71 @@
+<!DOCTYPE HTML>
+<html lang="pt-br">
+  <head>
+    <meta charset="utf-8" />
+    <title>Portaria Remota</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="author" content="Joao" />
+    <meta name="created" content="2024-04-17" />
+    <meta name="description" content="Atendimento de portaria remota" />
+    <link rel="shortcut icon" href="portaria.png" type="image/png" />
+    <link rel="stylesheet" href="estilos.css" />
+  </head>
+  <body>
+    <main>
+    <h3>Portaria remota</h3>
+    <hr />
+      <div class="tela" id="id-tela-principal" style="display: block;">
+        <p  style="float: right;">
+          <input type="submit" id="id-configurar" value="Configurar" />
+        </p>
+        <p>
+          <br />
+          <br />
+          <label for="id-uri">URI do Servidor: </label>
+          <input type="text" id="id-uri" value = "http://192.168.0.10:8080/" title="URI" readonly />
+          <input type="submit" id="id-mudar-uri" value="Alterar" />
+        </p>
+        <p>
+          <input type="submit" id="id-abrir" value="Abrir Cancela" />
+          <input type="submit" id="id-fechar" value="Fechar Cancela" />
+          <input type="submit" id="id-sirene" value="Soar Sirene" />
+          <input type="submit" id="id-refletor" value="Refletor" />
+        </p>
+        <p></p>
+        <p id="tx-campainha"  style="display: none;">Campainha ativada!!!</p>
+        <p id="tx-porta"  style="display: none;">Porta Aberta!!!</p>
+        <p></p>
+        <p id="tx-resultados">
+        </p>
+      </div>
+      <div class="tela" id="id-tela-config"  style="display: none;">
+        <p>Configuração</p>
+        <p>
+          <label for="id-ssid">SSID do Wifi: </label>
+          <input type="text" id="id-ssid" size="30" value = "espiot" maxlength="30" title="SSID" />
+        </p>
+        <p>
+          <label for="id-password">Senha do Wifi: </label>
+          <input type="password" id="id-password" size="10" maxlength="30" value = "" title="Password" />
+        </p>
+        <p>
+          <label for="id-hostname">Nome do Servidor HTTP (host): </label>
+          <input type="text" id="id-hostname" size="10" maxlength="30" value = "portaria2" title="Nome do servidor para DNS" />
+        </p>
+        <p>
+          <label for="ls-modo-wifi">Modo Wifi </label>
+          <select id="ls-modo-wifi" name="modo-wifi" size="2">
+            <option>STA</option>
+            <option>AP</option>
+          </select>
+        </p>
+        <p>
+          <input type="submit" id="id-salvar-config" value="Salvar" />
+          <input type="submit" id="id-cancelar" value="Cancelar" />
+        </p>
+      </div>
+    </main>
+    <script src="portaria_remota.js" defer="true"></script>
+    <noscript>Esse aplicativo só funciona com JavaScript ativado.</noscript>
+  </body>
+</html>
