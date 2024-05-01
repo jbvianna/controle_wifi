@@ -1,0 +1,359 @@
+EESchema Schematic File Version 4
+EELAYER 30 0
+EELAYER END
+$Descr A4 11693 8268
+encoding utf-8
+Sheet 1 1
+Title "Controle Wifi ESP32"
+Date "2024-04-18"
+Rev "1.00"
+Comp "João Vianna"
+Comment1 ""
+Comment2 ""
+Comment3 ""
+Comment4 ""
+$EndDescr
+$Comp
+L Connector_Generic:Conn_01x15 J1A
+U 1 1 66212098
+P 5090 3980
+F 0 "J1A" H 5310 4830 50  0000 L TNN
+F 1 "ESP32" H 5040 4810 50  0000 L CNN
+F 2 "" H 5090 3980 50  0001 C CNN
+F 3 "~" H 5090 3980 50  0001 C CNN
+	1    5090 3980
+	1    0    0    -1  
+$EndComp
+$Comp
+L Connector_Generic:Conn_01x15 J1B
+U 1 1 66212D29
+P 5830 3980
+F 0 "J1B" H 5748 4897 50  0000 C CNN
+F 1 "ESP32 Socket" H 5748 4806 50  0000 C CNN
+F 2 "" H 5830 3980 50  0001 C CNN
+F 3 "~" H 5830 3980 50  0001 C CNN
+	1    5830 3980
+	-1   0    0    -1  
+$EndComp
+Text Notes 5580 3280 0    50   ~ 0
+Vin
+Text Notes 5590 3390 0    50   ~ 0
+Gnd
+Text Notes 5600 3490 0    50   ~ 0
+D13
+Text Notes 5600 3590 0    50   ~ 0
+D12
+Text Notes 5600 3680 0    50   ~ 0
+D14
+Text Notes 5600 3780 0    50   ~ 0
+D27
+Text Notes 5600 3880 0    50   ~ 0
+D26
+Text Notes 5600 3990 0    50   ~ 0
+D25
+Text Notes 5600 4090 0    50   ~ 0
+D33
+Text Notes 5600 4190 0    50   ~ 0
+D32
+Text Notes 5600 4280 0    50   ~ 0
+D35
+Text Notes 5610 4390 0    50   ~ 0
+D34
+Text Notes 5610 4490 0    50   ~ 0
+VN
+Text Notes 5610 4580 0    50   ~ 0
+VP
+Text Notes 5610 4670 0    50   ~ 0
+EN
+Text Notes 5210 3290 0    50   ~ 0
+3V3
+Text Notes 5220 3380 0    50   ~ 0
+Gnd
+Text Notes 5220 3490 0    50   ~ 0
+D15
+Text Notes 5220 3590 0    50   ~ 0
+D2
+Text Notes 5220 3690 0    50   ~ 0
+D4
+Text Notes 5220 3790 0    50   ~ 0
+RX2
+Text Notes 5220 3890 0    50   ~ 0
+TX2
+Text Notes 5220 3990 0    50   ~ 0
+D5
+Text Notes 5220 4080 0    50   ~ 0
+D18
+Text Notes 5220 4180 0    50   ~ 0
+D19
+Text Notes 5220 4290 0    50   ~ 0
+D21
+Text Notes 5220 4390 0    50   ~ 0
+RX0
+Text Notes 5220 4480 0    50   ~ 0
+TX0
+Text Notes 5220 4580 0    50   ~ 0
+D22
+Text Notes 5220 4690 0    50   ~ 0
+D23
+$Comp
+L Device:R_US R1
+U 1 1 6620EB56
+P 3570 4080
+F 0 "R1" V 3365 4080 50  0000 C CNN
+F 1 "470R" V 3456 4080 50  0000 C CNN
+F 2 "" V 3610 4070 50  0001 C CNN
+F 3 "~" H 3570 4080 50  0001 C CNN
+	1    3570 4080
+	0    1    1    0   
+$EndComp
+$Comp
+L Transistor_BJT:BC548 Q?
+U 1 1 66211FE8
+P 3030 4080
+F 0 "Q?" H 3221 4126 50  0000 L CNN
+F 1 "BC548" H 3221 4035 50  0000 L CNN
+F 2 "Package_TO_SOT_THT:TO-92_Inline" H 3230 4005 50  0001 L CIN
+F 3 "https://www.onsemi.com/pub/Collateral/BC550-D.pdf" H 3030 4080 50  0001 L CNN
+	1    3030 4080
+	-1   0    0    -1  
+$EndComp
+Wire Wire Line
+	3230 4080 3420 4080
+$Comp
+L Relay:G5Q-1 K1
+U 1 1 6621ACD7
+P 2730 3180
+F 0 "K1" H 2300 3226 50  0000 R CNN
+F 1 "RL 5V 10A" H 2300 3135 50  0000 R CNN
+F 2 "Relay_THT:Relay_SPDT_Omron-G5Q-1" H 3180 3130 50  0001 L CNN
+F 3 "https://www.omron.com/ecb/products/pdf/en-g5q.pdf" H 2730 3180 50  0001 L CNN
+	1    2730 3180
+	-1   0    0    -1  
+$EndComp
+Wire Wire Line
+	2930 3480 2930 3880
+$Comp
+L power:GNDREF #PWR?
+U 1 1 6622A2A9
+P 2930 4480
+F 0 "#PWR?" H 2930 4230 50  0001 C CNN
+F 1 "GNDREF" H 2935 4307 50  0001 C CNN
+F 2 "" H 2930 4480 50  0001 C CNN
+F 3 "" H 2930 4480 50  0001 C CNN
+	1    2930 4480
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	2930 4490 2930 4480
+Connection ~ 2930 4480
+Wire Wire Line
+	2930 4480 2930 4280
+$Comp
+L power:+5V #PWR?
+U 1 1 6622B992
+P 2930 2580
+F 0 "#PWR?" H 2930 2430 50  0001 C CNN
+F 1 "+5V" H 2945 2753 50  0000 C CNN
+F 2 "" H 2930 2580 50  0001 C CNN
+F 3 "" H 2930 2580 50  0001 C CNN
+	1    2930 2580
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	2930 2580 2930 2880
+Wire Wire Line
+	3720 4080 4890 4080
+Wire Wire Line
+	4890 4180 4540 4180
+Text Label 4140 4210 0    50   ~ 0
+ATUADOR2
+Text Label 4140 4070 0    50   ~ 0
+ATUADOR1
+Wire Wire Line
+	4890 4580 4540 4580
+Text Label 4140 4610 0    50   ~ 0
+ATUADOR3
+Wire Wire Line
+	4890 4680 4540 4680
+Text Label 4140 4710 0    50   ~ 0
+ATUADOR4
+$Comp
+L Isolator:NSL-32 U1
+U 1 1 6623E768
+P 6930 4280
+F 0 "U1" H 6930 4597 50  0000 C CNN
+F 1 "PC123" H 6930 4506 50  0000 C CNN
+F 2 "OptoDevice:Luna_NSL-32" H 6930 3980 50  0001 C CNN
+F 3 "http://lunainc.com/wp-content/uploads/2016/06/NSL-32.pdf" H 6980 4280 50  0001 C CNN
+	1    6930 4280
+	-1   0    0    -1  
+$EndComp
+Wire Wire Line
+	6030 4180 6630 4180
+$Comp
+L power:GNDREF #PWR?
+U 1 1 66247C88
+P 6430 4580
+F 0 "#PWR?" H 6430 4330 50  0001 C CNN
+F 1 "GNDREF" H 6435 4407 50  0001 C CNN
+F 2 "" H 6430 4580 50  0001 C CNN
+F 3 "" H 6430 4580 50  0001 C CNN
+	1    6430 4580
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	6630 4380 6430 4380
+Wire Wire Line
+	6430 4380 6430 4500
+Wire Wire Line
+	7230 4380 7330 4380
+Wire Wire Line
+	7330 4380 7330 4500
+Wire Wire Line
+	7330 4500 6430 4500
+Connection ~ 6430 4500
+Wire Wire Line
+	6430 4500 6430 4580
+$Comp
+L Device:R_US R5
+U 1 1 6624C231
+P 7330 3830
+F 0 "R5" H 7398 3876 50  0000 L CNN
+F 1 "470R" H 7398 3785 50  0000 L CNN
+F 2 "" V 7370 3820 50  0001 C CNN
+F 3 "~" H 7330 3830 50  0001 C CNN
+	1    7330 3830
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	7330 3980 7330 4180
+Wire Wire Line
+	7330 4180 7230 4180
+$Comp
+L power:+5V #PWR?
+U 1 1 6624FCF6
+P 7330 2880
+F 0 "#PWR?" H 7330 2730 50  0001 C CNN
+F 1 "+5V" H 7345 3053 50  0000 C CNN
+F 2 "" H 7330 2880 50  0001 C CNN
+F 3 "" H 7330 2880 50  0001 C CNN
+	1    7330 2880
+	1    0    0    -1  
+$EndComp
+Text Label 6270 4170 0    50   ~ 0
+SENSOR1
+Wire Wire Line
+	6030 4080 6270 4080
+Text Label 6090 4070 0    50   ~ 0
+SENSOR2
+$Comp
+L Switch:SW_MEC_5E SW1
+U 1 1 66216C0D
+P 7330 3280
+F 0 "SW1" V 7330 3528 50  0000 L CNN
+F 1 "SW_MEC_5E" V 7375 3528 50  0001 L CNN
+F 2 "" H 7330 3580 50  0001 C CNN
+F 3 "http://www.apem.com/int/index.php?controller=attachment&id_attachment=1371" H 7330 3580 50  0001 C CNN
+	1    7330 3280
+	0    1    1    0   
+$EndComp
+Wire Wire Line
+	7330 3480 7330 3680
+Wire Wire Line
+	7330 2880 7330 3080
+$Comp
+L Device:R_US Rn
+U 1 1 66233985
+P 6300 5750
+F 0 "Rn" H 6368 5796 50  0001 L CNN
+F 1 "33K" H 6368 5750 50  0000 L CNN
+F 2 "" V 6340 5740 50  0001 C CNN
+F 3 "~" H 6300 5750 50  0001 C CNN
+	1    6300 5750
+	1    0    0    -1  
+$EndComp
+$Comp
+L power:+3.3V #PWR?
+U 1 1 66241E12
+P 6300 5400
+F 0 "#PWR?" H 6300 5250 50  0001 C CNN
+F 1 "+3.3V" H 6315 5573 50  0000 C CNN
+F 2 "" H 6300 5400 50  0001 C CNN
+F 3 "" H 6300 5400 50  0001 C CNN
+	1    6300 5400
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	6300 5400 6300 5600
+Wire Wire Line
+	6300 5900 6300 5990
+Wire Wire Line
+	6300 5990 6000 5990
+Connection ~ 6300 5990
+Wire Wire Line
+	6300 5990 6600 5990
+Text Notes 5750 5990 0    50   ~ 0
+D34
+Text Notes 6730 5980 0    50   ~ 0
+SENSOR3
+$Comp
+L Device:R_US Rn?
+U 1 1 663230EB
+P 3300 6260
+F 0 "Rn?" H 3368 6306 50  0001 L CNN
+F 1 "33K" H 3368 6260 50  0000 L CNN
+F 2 "" V 3340 6250 50  0001 C CNN
+F 3 "~" H 3300 6260 50  0001 C CNN
+	1    3300 6260
+	1    0    0    -1  
+$EndComp
+Text Notes 2780 6010 0    50   ~ 0
+D35\n
+$Comp
+L power:GNDREF #PWR?
+U 1 1 6632C281
+P 3300 6600
+F 0 "#PWR?" H 3300 6350 50  0001 C CNN
+F 1 "GNDREF" H 3305 6427 50  0001 C CNN
+F 2 "" H 3300 6600 50  0001 C CNN
+F 3 "" H 3300 6600 50  0001 C CNN
+	1    3300 6600
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	3300 6410 3300 6600
+Connection ~ 3300 6600
+Wire Wire Line
+	3300 6600 3300 6610
+$Comp
+L Device:Jumper_NO_Small JP1
+U 1 1 66336501
+P 3300 5730
+F 0 "JP1" V 3254 5778 50  0000 L CNN
+F 1 "Factory reset" V 3345 5778 50  0000 L CNN
+F 2 "" H 3300 5730 50  0001 C CNN
+F 3 "~" H 3300 5730 50  0001 C CNN
+	1    3300 5730
+	0    1    1    0   
+$EndComp
+$Comp
+L power:+3.3V #PWR?
+U 1 1 6633CF0F
+P 3300 5450
+F 0 "#PWR?" H 3300 5300 50  0001 C CNN
+F 1 "+3.3V" H 3315 5623 50  0000 C CNN
+F 2 "" H 3300 5450 50  0001 C CNN
+F 3 "" H 3300 5450 50  0001 C CNN
+	1    3300 5450
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	3300 5450 3300 5630
+Wire Wire Line
+	3000 6000 3300 6000
+Wire Wire Line
+	3300 5830 3300 6000
+Connection ~ 3300 6000
+Wire Wire Line
+	3300 6000 3300 6110
+$EndSCHEMATC
