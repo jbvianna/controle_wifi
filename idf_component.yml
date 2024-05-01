@@ -1,4 +1,0 @@
-## IDF Component Manager Manifest File
-dependencies:
-  espressif/mdns: "*"
-  joltwallet/littlefs: "~=1.14.2"
