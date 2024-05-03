@@ -1,4 +1,4 @@
-/* Aplicativo - Portaria Remota
+/** @file portaria_remota.js Portaria Remota
  * descrição: Permite o controle de um módulo micro-controlador para
  *  acionar botões e monitorar sensores em uma portaria remota.
  * autor: João Vianna (jvianna@gmail.com)
@@ -44,7 +44,7 @@ var linhas_resultado = [];
 
 /** Limpa o texto na área de resultados/mensagens.
  */
-function LimparResultados() {
+function limparResultados() {
   linhas_resultado = [];
 
   txResultados.innerHTML = ''; 
@@ -53,7 +53,7 @@ function LimparResultados() {
 
 /** Mostra o texto na área de resultados/mensagens.
  */
-function MostrarResultados() {
+function mostrarResultados() {
   /* Preenche campo de resultados na tela a partir de Array de linhas.
      O campo destino deve ser do tipo <p>.
   */
@@ -65,7 +65,7 @@ function MostrarResultados() {
 
     @param texto Nova mensagem. Pode conter várias linhas separadas por '\n'.
  */
-function Imprimir(texto) {
+function imprimir(texto) {
   
   if (texto.indexOf('\n') < 0) {
     linhas_resultado.push(texto);
@@ -76,133 +76,232 @@ function Imprimir(texto) {
   }
 }
 
+
+// Persistência de dados no cliente
+const chave_registro_base = 'jvianna.gmail.com.portaria.';
+
+
+function guardarRegistroPermanente(chave, valor = '') {
+  localStorage.setItem(chave_registro_base + chave.toString(), JSON.stringify(valor));
+}
+
+
+function lerRegistroPermanente(chave) {
+  var repr = localStorage.getItem(chave_registro_base + chave.toString());
+  
+  if ((typeof repr) =='string') {
+    return JSON.parse(repr);
+  } else {
+    return null;
+  }
+}
+
+
+/** Correspondente a JSON.stringify() para text/plain
+ */
+function objetoParaListaParametros(objeto) {
+  let parametros = [];
+  
+  for (let chave in objeto) {
+    parametros.push(chave + '=' + objeto[chave]);
+  }
+  return parametros;
+}
+
+
 /* Lógica do programa
 */
+
+/** Classe que modela um Sensor do micro-controlador
+ */
+class Sensor {
+  constructor(id) {
+    this.servidor = '';                 // Servidor para onde são dirigidas as solicitações
+    this.id = id;                       // Identificador do periférico no servidor
+    this.valor = 0;                     // Cópia do valor lido no micro-controlador
+  }
+  
+  obterValor() {
+    return this.valor;
+  }
+  
+  mudarServidor(serv) {
+    this.servidor = serv;
+  }
+
+  // Para uso interno no método ler()  
+  mudarValor(val) {
+    this.valor = val;
+  }
+  
+  /** Envia um comando GET /sensor?id=(id) para o servidor.
+  
+      O valor lido do sensor é guardado internamente de acordo com a resposta recebida.
+   */
+  ler() {
+    if (this.servidor == '') {
+      // Se não sabe quem é o servidor...
+      return;
+    }
+    var xhttp = new XMLHttpRequest();
+    
+    var comando = this.servidor + 'sensor?id=' + this.id;
+    
+    var euMesmo = this;
+    xhttp.onreadystatechange = function() {
+      if (this.readyState == 4) {
+        if (this.status == 200) {
+          euMesmo.mudarValor(parseInt(this.responseText));
+        } else {
+          console.log('Erro Sensor::ler() ' + this.status.toString() + ' - ' + this.statusText);
+        }
+      }
+    };
+    // console.log('Sensor::ler() enviando comando: ' + comando);
+    
+    xhttp.open('GET', comando, true);
+    xhttp.send();
+  }
+}
+
+
+/** Classe que modela um Atuador do micro-controlador
+ */
+class Atuador {
+  constructor(id) {
+    this.servidor = '';                 // Servidor para onde são dirigidas as solicitações
+    this.id = id;                       // Identificador do periférico no servidor
+    this.valor = 0;                     // Guarda o estado esperado do atuador, conforme os comandos enviados
+    this.duracao = 0;                   // Valor configurável, usado na ação de pulsar()
+  }
+  
+  mudarServidor(serv) {
+    this.servidor = serv;
+  }
+  
+  obterValor() {
+    return this.valor;
+  }
+  
+  mudarDuracao(t) {
+    this.duracao = t;
+  }
+
+  mudarValor(val) {
+    this.valor = val;
+  }
+  
+  /** Envia um comando POST /atuador(id) para o servidor.
+  
+      @param acao ("off" para desligar, "on" para ligar, "toggle" para alternar e
+                   "pulse" para ligar e desligar após duração em ms)
+   */
+  enviarComando(acao) {
+    if (this.servidor == '') {
+      // Se não sabe quem é o servidor...
+      return;
+    }
+    var xhttp = new XMLHttpRequest();
+    
+    var cmd = {};
+    
+    cmd.action = acao;
+    
+    if (acao == 'pulse') {
+      cmd.duracao = this.duracao;
+    }
+    var conteudo = objetoParaListaParametros(cmd).join('\n');
+  
+    xhttp.onload = function() {
+      if (this.readyState == 4) {
+        if (this.status >= 200 && status <= 204) {
+          // console.log('Sucesso ' + this.statusText);
+        } else {
+          console.log('Erro Atuador::enviarComando ' + this.status.toString() + ' - ' + this.statusText);
+        }
+      }
+    };
+   
+    xhttp.open('POST', this.servidor + 'atuador' + this.id);
+    xhttp.setRequestHeader("Content-Type", "text/plain; charset=UTF-8")
+    xhttp.send(conteudo);
+  }
+  
+  desligar() {
+    this.enviarComando('off');
+    this.valor = 0;
+  }
+  
+  ligar() {
+    this.enviarComando('on');
+    this.valor = 1;
+  }
+  
+  alternar() {
+    this.enviarComando('toggle');
+    this.valor = 1 - this.valor;
+  }
+  
+  pulsar() {
+    this.enviarComando('pulse');
+    this.valor = 0;
+  }
+}
+
+
+// Para contar por quanto tempo cada atuador permanece ligado (AFAZER - Mudar lógica para o servidor)
 var abrindoCancela = 0;
 var fechandoCancela = 0;
 var soandoSirene = 0;
-var refletorLigado = false;
 
-// Atuadores no circuito do ESP_32
-var atAbrirCancela = 1; 
-var atFecharCancela = 2; 
-var atSirene = 3;
-var atRefletor = 4;
 
 // Sensores no circuito do ESP_32
-var snCampainha = 1;
-var snPortaAberta = 2;
 
-/* Comunicação com o servidor
- */
+// Sensor de id "1" é uma campainha
+var campainha = new Sensor("1");
 
-
-/** Envia um comando GET /atuar... para o servidor.
-
-    @param atuador Número do atuador, de 1 ao máximo de atuadores no módulo de controle.
-    @param valor 0 para desligado, 1 para ligado
- */
-function EnviarComandoAtuar(atuador, valor) {
-  var serv = txURI.value;
-  
-  var xhttp = new XMLHttpRequest();
-  
-  var comando = serv + 'atuar?at=' + atuador.toString() + '&v=' + valor.toString();
-  
-  xhttp.onreadystatechange = function() {
-    if (this.readyState == 4) {
-      if (this.status == 200) {
-        // console.log('Sucesso ' + this.statusText);
-      } else {
-        console.log('Erro EnviarComando Atuador ' + this.status.toString() + ' - ' + this.statusText);
-      }
-    }
-  };
-  // console.log('Enviando comando: ' + comando);
-  
-  xhttp.open('GET', comando, true);
-  xhttp.send();
-}
-
-/* Estado dos sensores mantido em memória
- */
-var campainhaAtivada = 1;
-var portaAberta = 0;            
-
-/** Envia comando GET /ler... para ler o estado da campainha (0 para acionada, 1 caso contrário).
- */
-function LerCampainha() {
-  var serv = txURI.value;
-  
-  var xhttp = new XMLHttpRequest();
-  
-  var comando = serv + 'ler?sn=' + snCampainha.toString();
-  
-  xhttp.onreadystatechange = function() {
-    if (this.readyState == 4) {
-      if (this.status == 200) {
-        campainhaAtivada = parseInt(this.responseText);
-      } else {
-        console.log('Erro LerCampainha Atuador ' + this.status.toString() + ' - ' + this.statusText);
-      }
-    }
-  };
-  // console.log('Enviando comando: ' + comando);
-  
-  xhttp.open('GET', comando, true);
-  xhttp.send();
-}
+// Sensor de id "2" verifica se uma porta está aberta
+var portaAberta = new Sensor("2");
 
 
-/** Envia comando GET /ler... para ler o estado da porta (1 para aberta, 0 caso contrário).
- */
-function LerPorta() {
-  var serv = txURI.value;
-  
-  var xhttp = new XMLHttpRequest();
-  
-  var comando = serv + 'ler?sn=' + snPortaAberta.toString();
-  
-  xhttp.onreadystatechange = function() {
-    if (this.readyState == 4) {
-      if (this.status == 200) {
-        portaAberta = parseInt(this.responseText);
-      } else {
-        console.log('Erro LerPorta ' + this.status.toString() + ' - ' + this.statusText);
-      }
-    }
-  };
-  // console.log('Enviando comando: ' + comando);
-  
-  xhttp.open('GET', comando, true);
-  xhttp.send();
-}
+// Atuadores no circuito do ESP_32
+
+// Atuador de id "1" é um botão que deverá aceita comandos "pulse" (AFAZER)
+var atAbrirCancela = new Atuador("1");
+
+var atFecharCancela = new Atuador("2");
+
+var sirene = new Atuador("3");
+
+// Atuador de id "4" é um refletor que aceita comandos "toggle"
+var refletor = new Atuador("4");
+
 
 
 /** Enviar comando para o atuador que controla a cancela para abri-la.
  */
-function AbrirCancela(evento) {
-  EnviarComandoAtuar(atAbrirCancela, 1);
+function abrirCancela(evento) {
+  atAbrirCancela.ligar();
   abrindoCancela = 2;
 }
 
-btAbrir.addEventListener('click', AbrirCancela);
+btAbrir.addEventListener('click', abrirCancela);
 
 
 /** Enviar comando para o atuador que controla a cancela para fechá-la.
  */
-function FecharCancela(evento) {
-  EnviarComandoAtuar(atFecharCancela, 1);
+function fecharCancela(evento) {
+  atFecharCancela.ligar();
   fechandoCancela = 2;
 }
 
-btFechar.addEventListener('click', FecharCancela);
+btFechar.addEventListener('click', fecharCancela);
 
 
 /** Forçar silêncio na sirene
  */
-function PararSirene() {
-  EnviarComandoAtuar(atSirene, 0);
+function pararSirene() {
+  sirene.desligar();
   btSirene.value = 'Soar Sirene';
   soandoSirene = 0;
 }
@@ -210,34 +309,32 @@ function PararSirene() {
 
 /** Trata botão que controla a sirene (toggle). 
  */
-function TratarSirene(evento) {
+function tratarSirene(evento) {
   if (soandoSirene > 0) {
-    PararSirene();
+    pararSirene();
   } else {
-    EnviarComandoAtuar(atSirene, 1);
+    sirene.ligar();
     btSirene.value = 'Parar Sirene';
     soandoSirene = 5;
   }
 }
 
-btSirene.addEventListener('click', TratarSirene);
+btSirene.addEventListener('click', tratarSirene);
 
 
-/** Trata botão que controla a sirene (toggle). 
+/** Trata botão que controla o refletor (toggle). 
  */
-function TratarRefletor(evento) {
-  if (refletorLigado) {
-    EnviarComandoAtuar(atRefletor, 0);
-    btRefletor.style.background = "rgb(240,240,240)";
-    refletorLigado = false;
-  } else {
-    EnviarComandoAtuar(atRefletor, 1);
+function tratarRefletor(evento) {
+  refletor.alternar();
+
+  if (refletor.obterValor() == 1) {
     btRefletor.style.background = "rgb(240,240,112)";
-    refletorLigado = true;
+  } else {
+    btRefletor.style.background = "rgb(240,240,240)";
   }
 }
 
-btRefletor.addEventListener('click', TratarRefletor);
+btRefletor.addEventListener('click', tratarRefletor);
 
 
 /* Comunicação com o servidor
@@ -247,7 +344,7 @@ var servidorConectado = false;
 
 /* Telas do programa
 */
-function AbrirTelaConfig(evento) {
+function abrirTelaConfig(evento) {
   lsModoWifi.selectedIndex = '0';
   txSenha.value = '';
   
@@ -255,88 +352,92 @@ function AbrirTelaConfig(evento) {
   telaConfig.style.display = 'block';
 }
 
-btConfigurar.addEventListener('click', AbrirTelaConfig);
+btConfigurar.addEventListener('click', abrirTelaConfig);
 
 
-function CancelarConfig(evento) {
+function cancelarConfig(evento) {
   telaPrincipal.style.display = 'block';
   telaConfig.style.display = 'none';
 }
 
-btCancelar.addEventListener('click', CancelarConfig);
+btCancelar.addEventListener('click', cancelarConfig);
 
 
-function SalvarConfig(evento) {
+function salvarConfig(evento) {
   var serv = txURI.value;
   
   var xhttp = new XMLHttpRequest();
   
-  xhttp.onreadystatechange = function() {
+  var cfg = {};
+  
+  cfg.ssid = txSSId.value;
+  cfg.password = txSenha.value;
+  cfg.hostname = txHostname.value;
+  cfg.modo_wifi = lsModoWifi.value;
+  
+  var conteudo = objetoParaListaParametros(cfg).join('\n');
+
+  xhttp.onload = function() {
     if (this.readyState == 4) {
-      if (this.status == 200) {
+      if (this.status >= 200 && this.status <= 204) {
         servidorConectado = false;
-        LimparResultados();
+        limparResultados();
       } else {
-        console.log('Erro SalvarConfig: ' + this.status.toString() + ' - ' + this.statusText);
+        console.log('Erro salvarConfig: ' + this.status.toString() + ' - ' + this.statusText);
       }
     }
   };
-  var modo_ap = '0';
-
-  if (lsModoWifi.value == 'AP') {
-    modo_ap = '1';
-  }
   
-  // Nota: o comando pode ter espaços e outros caracteres que precisam ser codificados.
-  var comando = 'config?ssid=' + txSSId.value + '&pw=' + txSenha.value + '&host=' + txHostname.value + '&ap=' + modo_ap;
+  xhttp.open('POST', serv + 'config');
+  xhttp.setRequestHeader("Content-Type", "text/plain; charset=UTF-8")
+  xhttp.send(conteudo);
   
-  xhttp.open('GET', encodeURI(serv + comando), true);
-  xhttp.send();
-
   telaPrincipal.style.display = 'block';
   telaConfig.style.display = 'none';
 }
 
-btSalvar.addEventListener('click', SalvarConfig);
+btSalvar.addEventListener('click', salvarConfig);
 
 
 
-function RefrescarTela() {
+function refrescarTela() {
   if (servidorConectado) {
     if (abrindoCancela > 0) {
       abrindoCancela -= 1;
       if (abrindoCancela <= 0) {
-        EnviarComandoAtuar(atAbrirCancela, 0);
+        atAbrirCancela.desligar();
       }
     }
     if (fechandoCancela > 0) {
       fechandoCancela -= 1;
       if (fechandoCancela <= 0) {
-        EnviarComandoAtuar(atFecharCancela, 0);
+        atFecharCancela.desligar();
       }
     }
     if (soandoSirene > 0) {
       soandoSirene -= 1;
       if (soandoSirene <= 0) {
-        PararSirene();
+        pararSirene();
       }
     }
-    LerCampainha();
-    LerPorta();
+    campainha.ler();
+    portaAberta.ler();
     
-    if (campainhaAtivada == 0) {
+    if (campainha.obterValor() == 0) {
+      // Campainha está acionada
       txCampainha.style = "display: block; color: blue;";
     } else {
       txCampainha.style = "display: none;";
     }
-    if (portaAberta > 0) {
+    if (portaAberta.obterValor() != 0) {
+      // A porta está aberta
       txPorta.style = "display: block; color: red;";
     } else {
       txPorta.style = "display: none;";
     }
-    MostrarResultados();
+    mostrarResultados();
   } else {
-    VerificarConexao();
+    verificarConexao();
   }
 }
 
@@ -344,25 +445,25 @@ function RefrescarTela() {
 var scrollId;
 var refrescandoTela = false;
 
-function ReiniciarControlador() {
-  EnviarComandoAtuar(atAbrirCancela, 0);
+function reiniciarControlador() {
+  atAbrirCancela.desligar();
   abrindoCancela = 0;
 
-  EnviarComandoAtuar(atFecharCancela, 0);
+  atFecharCancela.desligar();
   fechandoCancela = 0;
 
-  PararSirene();
+  pararSirene();
 }
 
 /** Verifica se a conexão está ativa enviando uma solicitação GET /status
  */
-function VerificarConexao() {
+function verificarConexao() {
   var serv = txURI.value;
   
   var xhttp = new XMLHttpRequest();
 
   // Limpa tela antes de enviar comando.
-  LimparResultados();
+  limparResultados();
   
   xhttp.onreadystatechange = function() {
     if (this.readyState == 4) {
@@ -370,13 +471,13 @@ function VerificarConexao() {
         let resposta = this.responseText; 
 
         // Se está tudo certo, imprimir o texto recebido.
-        LimparResultados();
-        Imprimir(resposta);
+        limparResultados();
+        imprimir(resposta);
         
         servidorConectado = true;
       } else {
         servidorConectado = false;
-        console.log('Erro VerificarConexao: ' + this.status.toString() + ' - ' + this.statusText);
+        console.log('Erro verificarConexao: ' + this.status.toString() + ' - ' + this.statusText);
       }
     }
   };
@@ -385,7 +486,7 @@ function VerificarConexao() {
 }
 
 
-function AtivarTela() {
+function ativarTela() {
   if (refrescandoTela) {
     clearInterval(scrollId);
     refrescandoTela = false;
@@ -393,7 +494,7 @@ function AtivarTela() {
   var intervalo = 1000; // Refresca a cada 1 segundo
     
   scrollId = setInterval(function () {
-    RefrescarTela();
+    refrescarTela();
   }, intervalo);
   refrescandoTela = true;
   
@@ -404,7 +505,7 @@ function AtivarTela() {
 }
 
 
-function SuspenderTela() {
+function suspenderTela() {
   if (refrescandoTela) {
     clearInterval(scrollId);
     refrescandoTela = false;
@@ -416,48 +517,41 @@ function SuspenderTela() {
 }
 
 
-// Persistência de dados no cliente
-const chave_registro_base = 'jvianna.gmail.com.portaria.';
+function atualizarServPerifericos() {
+  campainha.mudarServidor(txURI.value); 
+  portaAberta.mudarServidor(txURI.value);
 
-
-function GuardarRegistroPermanente(chave, valor = '') {
-  localStorage.setItem(chave_registro_base + chave.toString(), JSON.stringify(valor));
-}
-
-function LerRegistroPermanente(chave) {
-  var repr = localStorage.getItem(chave_registro_base + chave.toString());
-  
-  if ((typeof repr) =='string') {
-    return JSON.parse(repr);
-  } else {
-    return null;
-  }
+  atAbrirCancela.mudarServidor(txURI.value);
+  atFecharCancela.mudarServidor(txURI.value);  
+  sirene.mudarServidor(txURI.value);
+  refletor.mudarServidor(txURI.value);
 }
 
 
-function GuardarURI() {
-  GuardarRegistroPermanente("id-uri", txURI.value);
+function guardarURI() {
+  guardarRegistroPermanente("id-uri", txURI.value);
+  atualizarServPerifericos();
 }
 
 
-function LembrarURI() {
-  var servidor = LerRegistroPermanente("id-uri");
+function lembrarURI() {
+  var servidor = lerRegistroPermanente("id-uri");
   
   if (servidor !== null) {
     txURI.value = servidor;
   }
+  atualizarServPerifericos();
 }
 
 
-
-function TratarModifURI(evento) {
+function tratarModifURI(evento) {
   if (txURI.readOnly) {
     btMudarURI.value = "Reativar";
     
     servidorConectado = false;
-    SuspenderTela();
+    suspenderTela();
 
-    LimparResultados();
+    limparResultados();
 
     txURI.readOnly = false;
   } else {
@@ -465,27 +559,27 @@ function TratarModifURI(evento) {
 
     btMudarURI.value = "Alterar";
     
-    GuardarURI();
+    guardarURI();
 
-    VerificarConexao();
+    verificarConexao();
 
-    AtivarTela();
+    ativarTela();
   }
 }
 
-btMudarURI.addEventListener('click', TratarModifURI);
+btMudarURI.addEventListener('click', tratarModifURI);
 
 
-function PrepararTelaPrincipal() {
-  LembrarURI();
+function prepararTelaPrincipal() {
+  lembrarURI();
   
-  VerificarConexao();
+  verificarConexao();
 
-  ReiniciarControlador();
+  reiniciarControlador();
   
-  AtivarTela();
+  ativarTela();
 }
 
 
 // Ponto de partida do código.
-window.addEventListener('load', PrepararTelaPrincipal);
+window.addEventListener('load', prepararTelaPrincipal);
