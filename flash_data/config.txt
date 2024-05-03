@@ -1,4 +1,6 @@
 # Cada linha deve ter menos de 128 caracteres
-ssid=espiot
-password=
-softap=1
+ssid=bahia 
+password=2127228089
+hostname=portaria2
+modo_wifi=STA
+
