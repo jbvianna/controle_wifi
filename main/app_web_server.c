@@ -2,25 +2,45 @@
  *
     Um aplicativo cliente controla um módulo contendo atuadores,
     sensores, etc, utilizando um protocolo HTTP com o servidor.
+    
+    @author João Vianna (jvianna@gmail.com)
+    @version 0.82
 
     As solicitações seguem o protocolo:
     
     GET /status
+    
       Para obter um texto indicando o status do controlador.
       
-    GET /atuar?at=(id)&v=(valor)
-      Para alterar o estado de um atuador (porta de saída do módulo),
-      Onde at indica o atuador e v é 0 para desligar e 1 para ligar.
+    GET /sensor?id=(identificador)
     
-    GET /ler?sn=(id)
       Para ler o estado de um sensor (porta de entrada do módulo),
-      Onde sn indica o sensor para o qual se deseja obter o valor.
+      Onde id indica o sensor para o qual se deseja obter o valor.
       
-    GET /config?ssid=(ssid)&pd=(password)&ap=(ap_mode?)
+    POST /atuador(id)
+    
+      action=("off", "on", "toggle" ou "pulse")
+      [duration=(tempo em ms)]
+      
+      Para alterar o estado de um atuador (porta de saída do módulo),
+      Onde off desliga, on liga, toggle alterna o estado e
+      pulse liga e desliga após duração de tempo determinada.
+    
+    POST /config
+    
+      ssid=(ssid do Wifi)
+      password=(senha do Wifi)
+      wifi_mode=(STA/AP)
+      hostname=(nome do servidor HTTP)
+
       Para alterar a configuração do módulo.
 
     Base do código - Exemplos da biblioteca esp-idf
-    Derivado de Simple HTTPD Server Example
+    Derivado de Simple HTTPD Server Example e RESTful Server
+    
+    Histórico:
+      - Versão 0.82 modificação do protocolo, aproximando-se mais do modelo RESTful,
+        com a diferença de que o conteúdo das mensagens é em texto (text/plain).            
 
     @see app_config.h
  */
@@ -41,29 +61,33 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include <esp_err.h>
-#include <esp_log.h>
+#include "esp_err.h"
+#include "esp_log.h"
 
-#include <esp_system.h>
-#include <esp_event.h>
-#include <nvs_flash.h>
-#include <esp_wifi.h>
-#include <esp_netif.h>
-#include <esp_eth.h>
-#include <esp_tls_crypto.h>
-#include <esp_http_server.h>
+#include "esp_system.h"
+#include "esp_event.h"
+#include "nvs_flash.h"
+#include "esp_wifi.h"
+#include "esp_netif.h"
+#include "esp_eth.h"
+#include "esp_tls_crypto.h"
+#include "esp_http_server.h"
+#include "esp_vfs.h"
+// #include "cJSON.h"
 
+#include "utilitarios.h"
 #include "controle_gpio.h"
 #include "app_config.h"
 #include "app_web_server.h"
 
-static const char *TAG = "app web server";
+static const char *TAG = "app-web-server";
 
 // Mensagens específicas do módulo
 enum msg_local {
   MSGL_0,
   MSGL_1,
   MSGL_OK,
+  MSGL_CREATED,
   MSGL_FALTAM_PARAMETROS,
   MSGL_PARAMETRO_INVALIDO
 };
@@ -73,6 +97,7 @@ static const char *mensagens_locais[] = {
   "0",
   "1",
   "200 Ok",
+  "201 Created",
   "400 Faltam Parametros",
   "400 Parametro invalido"
 };
@@ -215,45 +240,48 @@ static void httpd_register_basic_auth(httpd_handle_t server)
 }
 #endif
 
+// Buffer que vai de servir de contexto para as mensagens, com área de rascunho.
+#define SCRATCH_BUFSIZE (4096)
 
-/** Função auxiliar para decodificar uma URI.
+typedef struct rest_server_context {
+    char scratch[SCRATCH_BUFSIZE];
+} rest_server_context_t;
 
-    @param dst Destino do resultado (pode ser o mesmo que a origem).
-    @param src Começa com a URL original, a ser transformada;
+static rest_server_context_t rest_context = { 0 };
 
-    Código obtido na Internet
-    TODO: Passar para módulo utilitários
-*/
-static void urldecode2(char *dst, const char *src) {
-    char a, b;
-    while(*src) {
-        if((*src == '%') && ((a = src[1]) && (b = src[2])) && (isxdigit(a) && isxdigit(b))) {
-            if(a >= 'a')
-                a -= 'a'-'A';
-            if(a >= 'A')
-                a -= ('A' - 10);
-            else
-                a -= '0';
-            if(b >= 'a')
-                b -= 'a'-'A';
-            if(b >= 'A')
-                b -= ('A' - 10);
-            else
-                b -= '0';
-            *dst++ = 16*a+b;
-            src+=3;
-        } else if(*src == '+') {
-            *dst++ = ' ';
-            src++;
-        } else {
-            *dst++ = *src++;
-        }
+
+/*  Preenche buffer com conteúdo de uma mensagem POST.
+
+    Retorna o número de bytes lidos, ou -1 se houve erro.
+ */
+static int ler_conteudo_post(httpd_req_t *req, char *buf, int buf_size) {
+  int total_len = req->content_len;
+  int cur_len = 0;
+  
+  int received = 0;
+  
+  if (total_len >= buf_size) {
+    /* Respond with 500 Internal Server Error */
+    httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Content too long");
+    return -1;
+  }
+  while (cur_len < total_len) {
+    received = httpd_req_recv(req, buf + cur_len, total_len - cur_len);
+    if (received <= 0) {
+        /* Respond with 500 Internal Server Error */
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Client failed to post request content");
+        return -1;
     }
-    *dst++ = '\0';
+    cur_len += received;
+  }
+  buf[total_len] = '\0';
+
+  return total_len;
 }
 
 
 /*  Preencher os cabeçalhos padrão de uma resposta de tipo texto.
+    Acrescenta permissões de controle de acesso.
  */
 static void preencher_cabecalho_text_plain(httpd_req_t *req) {
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
@@ -315,8 +343,8 @@ static esp_err_t get_status_handler(httpd_req_t *req)
                     resp_str = mensagens_locais[MSGL_PARAMETRO_INVALIDO];
                 }
             }
-            if (httpd_query_key_value(buf, "sn", param, sizeof(param)) == ESP_OK) {
-                ESP_LOGD(TAG, "Found URL query parameter => sn=%s", param);
+            if (httpd_query_key_value(buf, "id", param, sizeof(param)) == ESP_OK) {
+                ESP_LOGD(TAG, "Found URL query parameter => id=%s", param);
                 if (periferico == PRF_NDEF ) {
                     periferico = PRF_SENSOR;
                     id_perif = atoi(param);
@@ -354,87 +382,175 @@ static const httpd_uri_t get_status_uri = {
     .uri       = "/status",
     .method    = HTTP_GET,
     .handler   = get_status_handler,
-    .user_ctx  = "Ok"
+    .user_ctx  = &rest_context
 };
 
 
-/*  Trata GET /atuar?at=<id>&v=<valor>.
+enum acao_atuador {
+  ACAO_ATUADOR_OFF,             // Esta deve ser sempre a primeira
+  ACAO_ATUADOR_ON,
+  ACAO_ATUADOR_TOGGLE,
+  ACAO_ATUADOR_PULSE,
+  ACAO_ATUADOR_NOP              // Esta deve ser sempre a última
+};
+
+
+// Este array deve coincidir com o enumerado acima.
+const char *acoes_conhecidas [] = {
+  "off",
+  "on",
+  "toggle",
+  "pulse",
+  "no action"
+};
+
+
+/*  Trata POST /atuador(id)
+
+    action=(on/off/toggle/pulse)
+    duration=(tempo em ms)
 
     Modifica o estado de um atuador.
     id é o identificador do atuador, começando em 1.
-    Se valor é 1, o atuador é ligado, se 0, desligado
 
-    NOTA: Em versões futuras, o valor poderá ser um inteiro, para
-          o caso de atuadores ligados a uma saída DAC.    
+    Parâmetros:
+      id_perif - identificador do periférico.
+      req - requisição de serviço vinda do cliente.
  */
-static esp_err_t get_atuar_handler(httpd_req_t *req)
-{
-  char*  buf;
-  size_t buf_len;
-
-  int resposta = MSGL_OK;
+static esp_err_t post_atuador_n_handler(int id_perif, httpd_req_t *req) {
+  // Prepara área de rascunho
+  char*  buf = ((rest_server_context_t *)(req->user_ctx))->scratch;
+  char*  saved_ptr;
+  char*  param;
   
-  /* Read URL query string length and allocate memory for length + 1,
-   * extra byte for null termination */
-  buf_len = httpd_req_get_url_query_len(req) + 1;
-  if (buf_len > 1) {
-    buf = malloc(buf_len);
-    if (httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK) {
-      char param[32];
+  int acao = ACAO_ATUADOR_NOP;
+  int duracao = 0;
+  
+  int resposta = MSGL_CREATED;
+  
+  int received = ler_conteudo_post(req, buf, SCRATCH_BUFSIZE);
+  
+  if (received < 0) {
+    return ESP_FAIL;
+  }
+  
+  // Percorrendo linhas do conteúdo
+  char *linha = strtok_r(buf, "\n", &saved_ptr);
+  
+  while (linha != NULL) {
 
-      int id_perif = 0;
-      int valor = -1;
-
-      ESP_LOGD(TAG, "Found URL query => %s", buf);
-
-      if (httpd_query_key_value(buf, "at", param, sizeof(param)) == ESP_OK) {
-        id_perif = atoi(param);
-      } else {
-        ESP_LOGE(TAG, "Atuador não definido");
-        resposta = MSGL_FALTAM_PARAMETROS;
-      }
-      if (httpd_query_key_value(buf, "v", param, sizeof(param)) == ESP_OK) {
-        valor = atoi(param);
-      } else {
-        ESP_LOGE(TAG, "Valor não definido");
-        resposta = MSGL_FALTAM_PARAMETROS;
-      }
-      if((id_perif > 0) && (valor >= 0)) {
-        controle_gpio_mudar_atuador(id_perif, valor);
-      } else {
-        resposta = MSGL_PARAMETRO_INVALIDO;
-      }
+    if (str_startswith(linha, "action=")) {
+      param = linha + 7;
+      // ESP_LOGI(TAG, "Ação sobre atuador: %s", param);
+      
+      acao = ACAO_ATUADOR_OFF;    // Começa da primeira ação conhecida
+      
+      while (acao < ACAO_ATUADOR_NOP) {
+        if (strcmp(acoes_conhecidas[acao], param) == 0) {
+          break;
+        }
+        acao++;
+      }      
+    } else if (str_startswith(linha, "duration=")) {
+      param = linha + 9;
+      // ESP_LOGI(TAG, "Duração: %s", param);
+      duracao = atoi(param);
+    } else if (strlen(linha) > 0) {
+      ESP_LOGE(TAG, "Parâmetro desconhecido por atuador: %s", linha);
     }
-    free(buf);
-  } else {
-    ESP_LOGE(TAG, "Comando /atuar sem parâmetros");
+    linha = strtok_r(NULL, "\n", &saved_ptr);
   }
 
+  switch (acao) {
+    case ACAO_ATUADOR_OFF:
+        controle_gpio_mudar_atuador(id_perif, 0);
+      break;
+    case ACAO_ATUADOR_ON:
+        controle_gpio_mudar_atuador(id_perif, 1);
+      break;
+    case ACAO_ATUADOR_TOGGLE:
+        controle_gpio_alternar_atuador(id_perif);
+      break;
+    case ACAO_ATUADOR_PULSE:
+        if (duracao > 0) {
+          controle_gpio_pulsar_atuador(id_perif, duracao);
+        } else {
+          ESP_LOGE(TAG, "Duração inválida para pulso do atuador.");
+        }
+      break;
+    case ACAO_ATUADOR_NOP:
+      ESP_LOGE(TAG, "Ação desconhecida por atuador.");
+      break;
+  }
+  // Preparar cabeçalhos da resposta
   preencher_cabecalho_text_plain(req);
 
-  if (resposta > MSGL_OK) {
-    httpd_resp_set_status(req, "400 BAD REQUEST");
+  if (resposta >= MSGL_OK) {
+    httpd_resp_set_status(req, mensagens_locais[resposta]);
   }
-
-  httpd_resp_send(req, mensagens_locais[resposta], HTTPD_RESP_USE_STRLEN);
-
+  httpd_resp_sendstr(req, mensagens_locais[resposta]);
   return ESP_OK;
 }
 
-static const httpd_uri_t get_atuar_uri = {
-    .uri       = "/atuar",
-    .method    = HTTP_GET,
-    .handler   = get_atuar_handler,
-    .user_ctx  = "Ok"
+
+static esp_err_t post_atuador1_handler(httpd_req_t *req) {
+  return post_atuador_n_handler(1, req);
+}
+
+
+static const httpd_uri_t post_atuador1_uri = {
+    .uri       = "/atuador1",
+    .method    = HTTP_POST,
+    .handler   = post_atuador1_handler,
+    .user_ctx  = &rest_context
 };
 
 
-/*  Trata GET /ler?sn=<id>.
+static esp_err_t post_atuador2_handler(httpd_req_t *req) {
+  return post_atuador_n_handler(2, req);
+}
+
+
+static const httpd_uri_t post_atuador2_uri = {
+    .uri       = "/atuador2",
+    .method    = HTTP_POST,
+    .handler   = post_atuador2_handler,
+    .user_ctx  = &rest_context
+};
+
+
+static esp_err_t post_atuador3_handler(httpd_req_t *req) {
+  return post_atuador_n_handler(3, req);
+}
+
+
+static const httpd_uri_t post_atuador3_uri = {
+    .uri       = "/atuador3",
+    .method    = HTTP_POST,
+    .handler   = post_atuador3_handler,
+    .user_ctx  = &rest_context
+};
+
+
+static esp_err_t post_atuador4_handler(httpd_req_t *req) {
+  return post_atuador_n_handler(4, req);
+}
+
+
+static const httpd_uri_t post_atuador4_uri = {
+    .uri       = "/atuador4",
+    .method    = HTTP_POST,
+    .handler   = post_atuador4_handler,
+    .user_ctx  = &rest_context
+};
+
+
+/*  Trata GET /sensor?id=<identificador>.
 
     Lê o valor de um sensor, retornando 0 se desligado e 1 se ligado.
     id é o identificador do sensor a ser lido, começando de 1
  */
-static esp_err_t get_ler_handler(httpd_req_t *req)
+static esp_err_t get_sensor_handler(httpd_req_t *req)
 {
   char*  buf;
   size_t buf_len;
@@ -453,7 +569,7 @@ static esp_err_t get_ler_handler(httpd_req_t *req)
       // ESP_LOGI(TAG, "Found URL query => %s", buf);
 
       /* Obter id do sensor a ser lido */
-      if (httpd_query_key_value(buf, "sn", param, sizeof(param)) == ESP_OK) {
+      if (httpd_query_key_value(buf, "id", param, sizeof(param)) == ESP_OK) {
         int id_sensor = atoi(param);
         int valor = controle_gpio_ler_sensor(id_sensor);
         
@@ -478,92 +594,82 @@ static esp_err_t get_ler_handler(httpd_req_t *req)
   if (resposta > MSGL_OK) {
     httpd_resp_set_status(req, "400 BAD REQUEST");
   }
-
   httpd_resp_send(req, mensagens_locais[resposta], HTTPD_RESP_USE_STRLEN);
-
   return ESP_OK;
 }
 
 
-static const httpd_uri_t get_ler_uri = {
-    .uri       = "/ler",
+static const httpd_uri_t get_sensor_uri = {
+    .uri       = "/sensor",
     .method    = HTTP_GET,
-    .handler   = get_ler_handler,
-    .user_ctx  = NULL
+    .handler   = get_sensor_handler,
+    .user_ctx  = &rest_context
 };
 
 
-/*  Trata GET /config?ssid=<ssid>&pd=<password>&ap=<ap_mode?>.
+/*  Trata POST /config
+
+    ssid=<ssid do Wifi>
+    password=<password do Wifi>
+    hostname=<nome do servidor HTTP na rede>
+    modo_wifi=<modo da conexão "AP" ou "STA">
 
     Salva a configuração em memória permanente.
  */
-static esp_err_t get_config_handler(httpd_req_t *req)
+static esp_err_t post_config_handler(httpd_req_t *req)
 {
-  char*  buf;
-  size_t buf_len;
+  char*  buf = ((rest_server_context_t *)(req->user_ctx))->scratch;
+  char*  saved_ptr;
+  char*  param;
+
+  int resposta = MSGL_CREATED;
   
-  int resposta = MSGL_OK;
+  int received = ler_conteudo_post(req, buf, SCRATCH_BUFSIZE);
   
-  /* Read URL query string length and allocate memory for length + 1,
-   * extra byte for null termination */
-  buf_len = httpd_req_get_url_query_len(req) + 1;
-  if (buf_len > 1) {
-    buf = malloc(buf_len);
+  if (received < 0) {
+    return ESP_FAIL;
+  }
 
-    ESP_LOGI(TAG, "Handle /config request");
-    if (httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK) {
-      char param[64];
+  // Percorrendo linhas do conteúdo
+  char *linha = strtok_r(buf, "\n", &saved_ptr);
+  
+  while (linha != NULL) {
 
-      ESP_LOGI(TAG, "Found URL query => %s", buf);
-
-      if (httpd_query_key_value(buf, "ssid", param, sizeof(param)) == ESP_OK) {
-
-        // O ssid pode ter caracteres codificados        
-        urldecode2(param, param);
-        
-        // ESP_LOGI(TAG, "Novo ssid: %s", param);
-        app_config_set_wifi_ssid(param);
-      }
-      if (httpd_query_key_value(buf, "pw", param, sizeof(param)) == ESP_OK) {
-        
-        // A senha pode ter caracteres codificados        
-        urldecode2(param, param);
-        
-        // ESP_LOGI(TAG, "Nova senha: %s", param);
-        app_config_set_wifi_password(param);
-      }
-      if (httpd_query_key_value(buf, "host", param, sizeof(param)) == ESP_OK) {
-        
-        // Nome do servidor caracteres codificados        
-        urldecode2(param, param);
-        
-        // ESP_LOGI(TAG, "Novo hostname: %s", param);
-        app_config_set_hostname(param);
-      }
-      if (httpd_query_key_value(buf, "ap", param, sizeof(param)) == ESP_OK) {
-        
-        // ESP_LOGI(TAG, "Modo STA(0)/AP(1): %s", param);
-        app_config_set_softap(atoi(param));
-      }
+    if (str_startswith(linha, "ssid=")) {
+      param = linha + 5;
+      // ESP_LOGI(TAG, "Novo ssid: %s", param);
+      app_config_set_wifi_ssid(param);
+    } else if (str_startswith(linha, "password=")) {
+      param = linha + 9;
+      // ESP_LOGI(TAG, "Nova senha: %s", param);
+      app_config_set_wifi_password(param);
+    } else if (str_startswith(linha, "hostname=")) {
+      param = linha + 9;
+      // ESP_LOGI(TAG, "Novo hostname: %s", param);
+      app_config_set_hostname(param);
+    } else if (str_startswith(linha, "modo_wifi=")) {
+      param = linha + 10;
+      // ESP_LOGI(TAG, "Modo Wifi: %s", param);
+      app_config_set_modo_wifi(param);
+    } else if (strlen(linha) > 0) {
+      ESP_LOGE(TAG, "Parâmetro de configuração desconhecido: %s", linha);
     }
-    free(buf);
-  } else {
-    resposta = MSGL_FALTAM_PARAMETROS;
+    linha = strtok_r(NULL, "\n", &saved_ptr);
   }
 
   // Preparar cabeçalhos da resposta
   preencher_cabecalho_text_plain(req);
 
-  if (resposta > MSGL_OK) {
-    httpd_resp_set_status(req, "400 BAD REQUEST");
+  if (resposta >= MSGL_OK) {
+    httpd_resp_set_status(req, mensagens_locais[resposta]);
   }
 
-  httpd_resp_send(req, mensagens_locais[resposta], HTTPD_RESP_USE_STRLEN);
+  httpd_resp_sendstr(req, mensagens_locais[resposta]);
 
-  if (resposta == MSGL_OK) {
+  if (resposta == MSGL_CREATED) {
     if (app_config_gravar() == ESP_OK) {
       // Se alterou configuração na memória FLASH, é preciso reiniciar.
-      ESP_LOGI(TAG, "Reiniciando o módulo...");
+      ESP_LOGI(TAG, "Aguardando o módulo ser reiniciado");
       // sleep(1);
       // esp_restart();
     }
@@ -572,11 +678,11 @@ static esp_err_t get_config_handler(httpd_req_t *req)
 }
 
 
-static const httpd_uri_t get_config_uri = {
+static const httpd_uri_t post_config_uri = {
     .uri       = "/config",
-    .method    = HTTP_GET,
-    .handler   = get_config_handler,
-    .user_ctx  = NULL
+    .method    = HTTP_POST,
+    .handler   = post_config_handler,
+    .user_ctx  = &rest_context
 };
 
 
@@ -603,7 +709,7 @@ static const httpd_uri_t head_raiz_uri = {
     .uri       = "/",
     .method    = HTTP_HEAD,
     .handler   = head_raiz_handler,
-    .user_ctx  = NULL
+    .user_ctx  = &rest_context
 };
 
 
@@ -612,36 +718,40 @@ static const httpd_uri_t head_raiz_uri = {
 
 httpd_handle_t start_webserver(void)
 {
-    httpd_handle_t server = NULL;
-    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+  httpd_handle_t server = NULL;
+  httpd_config_t config = HTTPD_DEFAULT_CONFIG();
 
-    config.lru_purge_enable = true;
-    config.server_port = CONFIG_HTTP_SERVER_PORT;
+  config.lru_purge_enable = true;
+  config.server_port = CONFIG_HTTP_SERVER_PORT;
 
-    // Start the httpd server
-    ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
-    if (httpd_start(&server, &config) == ESP_OK) {
-        // Set URI handlers
-        ESP_LOGI(TAG, "Registering URI handlers");
-        httpd_register_uri_handler(server, &get_status_uri);
-        httpd_register_uri_handler(server, &get_atuar_uri);
-        httpd_register_uri_handler(server, &get_ler_uri);
-        httpd_register_uri_handler(server, &get_config_uri);
-        httpd_register_uri_handler(server, &head_raiz_uri);
+  // Start the httpd server
+  ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
 
-        #if CONFIG_EXAMPLE_BASIC_AUTH
-        httpd_register_basic_auth(server);
-        #endif
-        return server;
-    }
+  if (httpd_start(&server, &config) == ESP_OK) {
+      // Set URI handlers
+      ESP_LOGI(TAG, "Registering URI handlers");
+      httpd_register_uri_handler(server, &get_status_uri);
+      httpd_register_uri_handler(server, &get_sensor_uri);
+      httpd_register_uri_handler(server, &post_atuador1_uri);
+      httpd_register_uri_handler(server, &post_atuador2_uri);
+      httpd_register_uri_handler(server, &post_atuador3_uri);
+      httpd_register_uri_handler(server, &post_atuador4_uri);
+      httpd_register_uri_handler(server, &post_config_uri);
+      httpd_register_uri_handler(server, &head_raiz_uri);
 
-    ESP_LOGE(TAG, "Error starting server!");
-    return NULL;
+      #if CONFIG_EXAMPLE_BASIC_AUTH
+      httpd_register_basic_auth(server);
+      #endif
+      return server;
+  }
+
+  ESP_LOGE(TAG, "Error starting server!");
+  return NULL;
 }
 
 esp_err_t stop_webserver(httpd_handle_t server)
 {
-    // Stop the httpd server
-    return httpd_stop(server);
+  // Stop the httpd server
+  return httpd_stop(server);
 }
 

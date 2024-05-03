@@ -5,10 +5,6 @@
     
     NOTA: Foram realizadas modificações mínimas, passando o ssid e senha como
           parâmetros para a função de iniciar.
-    
-    \todo Use mDNS
-    https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/protocols/mdns.html
-    https://docs.espressif.com/projects/esp-protocols/mdns/docs/latest/en/index.html
  */
 
 /* WiFi station Example

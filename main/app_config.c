@@ -13,8 +13,10 @@
     
     @see https://github.com/littlefs-project/littlefs
     
-    Author: Joao Vianna (jvianna@gmail.com)
-    Version: 0.5
+    @author Joao Vianna (jvianna@gmail.com)
+    @version 0.82 03/05/2024
+      - Pino do micro-controlador força retorno às configurações de fábrica.
+      - Adicionado campo hostname e pequenas mudanças nos nomes dos parâmetros.
 
     Código de armazenamento derivado de:
     .../esp-idf/examples/storage/littlefs/main/esp_littlefs_example.c
@@ -32,9 +34,10 @@
    History:
      20240427 - Código movido para módulo próprio
      Version 0.5 - Recuperando e salvando configuração para memória FLASH
+     Versão 0.82
 
    Known problems, improvements needed...
-     Melhorar código de configuração;
+
 */
 #include <stdio.h>
 #include <string.h>
@@ -44,6 +47,7 @@
 #include <esp_log.h>
 #include <esp_littlefs.h>
 
+#include "utilitarios.h"
 #include "controle_gpio.h"
 #include "app_config.h"
 
@@ -56,22 +60,6 @@ static esp_vfs_littlefs_conf_t littlefs_conf = {
       .format_if_mount_failed = true,
       .dont_mount = false,
 };
-
-/** Função auxiliar - Verifica se um string se inicia com determinada sequência.
-
-    \todo Mover para módulo de utilitarios.
-*/
-bool str_startswith(const char *str, const char *substr) {
-  while (*substr != '\0') {
-    if (*str != *substr) {
-      return false;
-    }
-    str++;
-    substr++;
-  }
-  return true;
-}
-
 
 /*  Inicia e monta um sistema de arquivos LittleFS.
  */
@@ -111,6 +99,12 @@ static void terminar_littlefs() {
   ESP_LOGI(TAG, "LittleFS unmounted");
 }
 
+
+static const char* nomes_modo_wifi[2] = {
+  "STA",
+  "AP"
+};
+
 /*  Estrutura de configuração específica do aplicativo
  */
 typedef struct {
@@ -118,7 +112,7 @@ typedef struct {
   char wifi_password[MAX_PASSWORD_LEN + 1];     // Senha do Wifi
 
   char hostname[MAX_HOSTNAME_LEN + 1];          // Nome do servidor HTTP
-  int   softap;                                 // 1 Se Modo Wifi deve ser AP, 0 se Station
+  int  modo_wifi;                               // Station ou AP
   
   bool  modified;                               // Indica se a configuração mudou
 } app_config_t;
@@ -131,8 +125,8 @@ static app_config_t app_config;
 
 // Ver a descrição das funções públicas em app_config.h
 
-bool app_config_softap(void) {
-  return (app_config.softap != 0);
+enum modo_conexao_wifi app_config_modo_wifi(void) {
+  return (app_config.modo_wifi);
 }
 
 
@@ -151,13 +145,16 @@ const char *app_config_hostname(void) {
 }
 
 
-void app_config_set_softap(int modo) {
-  if (modo == 0) {
+void app_config_set_modo_wifi(const char* modo) {
+  if (strcmp(modo, "STA") == 0) {
     ESP_LOGI(TAG, "Modo wifi: STA");
-    app_config.softap = 0;
-  } else {
+    app_config.modo_wifi = MODO_WIFI_STA;
+  } else if (strcmp(modo, "AP") == 0) {
     ESP_LOGI(TAG, "Modo wifi: AP");
-    app_config.softap = 1;
+    app_config.modo_wifi = MODO_WIFI_AP;
+  } else {
+    ESP_LOGE(TAG, "Modo Wifi desconhecido: %s", modo);
+    return;  
   }
   app_config.modified = true;
 }
@@ -167,7 +164,7 @@ void app_config_set_wifi_ssid(const char *ssid) {
   size_t len = strlen(ssid);
   
   if (len <= MAX_SSID_LEN ) {
-    ESP_LOGI(TAG, "Wifi ssid: (%s)", ssid);
+    ESP_LOGI(TAG, "Wifi ssid: '%s'", ssid);
     strcpy(app_config.wifi_ssid, ssid);
     app_config.modified = true;
   }
@@ -178,7 +175,7 @@ void app_config_set_wifi_password(const char *pwd) {
   size_t len = strlen(pwd);
       
   if (len <= MAX_PASSWORD_LEN ) {
-    ESP_LOGI(TAG, "Senha: (%s)", pwd);
+    ESP_LOGI(TAG, "Senha: '%s'", pwd);
     strcpy(app_config.wifi_password, pwd);
     app_config.modified = true;
   }
@@ -201,7 +198,7 @@ void app_config_ler(void) {
   app_config_set_wifi_ssid(CONFIG_ESP_WIFI_SSID);
   app_config_set_wifi_password(CONFIG_ESP_WIFI_PASSWORD);
   app_config_set_hostname(CONFIG_MDNS_HOSTNAME);
-  app_config_set_softap(1);
+  app_config_set_modo_wifi("AP");
 
   if(controle_gpio_reconfig()) {
     ESP_LOGI(TAG, "Voltando a config original.");
@@ -252,8 +249,8 @@ void app_config_ler(void) {
       app_config_set_wifi_password(line + 9);
     } else if (str_startswith(line, "hostname=")) {
       app_config_set_hostname(line + 9);
-    } else if (str_startswith(line, "softap=")) {
-      app_config_set_softap(atoi(line + 7));
+    } else if (str_startswith(line, "modo_wifi=")) {
+      app_config_set_modo_wifi(line + 10);
     }
   }
   fclose(f);
@@ -279,7 +276,7 @@ esp_err_t app_config_gravar(void) {
   fprintf(f, "ssid=%s\n",  app_config.wifi_ssid);
   fprintf(f, "password=%s\n",  app_config.wifi_password);
   fprintf(f, "hostname=%s\n",  app_config.hostname);
-  fprintf(f, "softap=%d\n",  app_config.softap);
+  fprintf(f, "modo_wifi=%s\n",  nomes_modo_wifi[app_config.modo_wifi]);
   fprintf(f, "\n");
   
   fclose(f);

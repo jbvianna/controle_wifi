@@ -1,4 +1,6 @@
 # Cada linha deve ter menos de 128 caracteres
 ssid=espiot
 password=
-softap=1
+hostname=espbox
+modo_wifi=AP
+
