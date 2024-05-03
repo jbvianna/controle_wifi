@@ -1,4 +1,4 @@
-idf_component_register(SRCS "main.c" "controle_gpio.c" "wifi_station.c" "wifi_softap.c" "app_web_server.c" "app_config.c"
+idf_component_register(SRCS "main.c" "controle_gpio.c" "wifi_station.c" "wifi_softap.c" "app_web_server.c" "app_config.c" "utilitarios.c"
                     INCLUDE_DIRS ".")
 
 # Note: you must have a partition named the first argument (here it's "littlefs")
@@ -8,3 +8,4 @@ if(NOT CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
 else()
     fail_at_build_time(littlefs "Windows does not support LittleFS partition generation")
 endif()
+

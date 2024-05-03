@@ -14,6 +14,9 @@
     Um pino especial oferece ao aplicativo um indicador de reconfiguração,
     para que o sistema possa ser retornado à configuração de fábrica.
     
+    @author João Vianna (jvianna@gmail.com)
+    @version 0.82 03/05/2024
+    
     Código criado a partir do exemplo:
     .../esp-idf/examples/peripherals/gpio/generic_gpio/main/gpio_example_main.c  
 */
@@ -39,6 +42,7 @@
 #include "controle_gpio.h"
 
 /*
+ * Comentário no código original
  * Brief:
  * This test code shows how to configure gpio and how to use gpio interrupt.
  *
@@ -66,20 +70,26 @@
 #define ALARME_1             GPIO_NUM_4
 #define MASCARA_ALARMES    ((1ULL << ALARME_1))
 #define MASCARA_SENSORES   ((1ULL << GPIO_NUM_32) | (1ULL << GPIO_NUM_33))
-#define MASCARA_READ_ONLY    ((1ULL << GPIO_RECONFIG))
+#define MASCARA_READ_ONLY  ((1ULL << GPIO_RECONFIG))
 
 
 #define ESP_INTR_FLAG_DEFAULT 0
 
 // Tabelas de periféricos
 
+typedef struct {
+  int   gpio;                   //< Porta do ESP32 onde está ligado o atuador 
+  int   valor;                  //< Último valor atribuído ao atuador
+  int   tempo_restante;         //< Tempo restante para ser desligado (para ação pulse)
+} estado_atuador_t;
+
 // Mapeia pinos GPIO de saída para id dos atuadores
-static const int mapa_atuadores[MAX_ATUADORES + 1] = {
-  0,
-  GPIO_NUM_18,
-  GPIO_NUM_19,
-  GPIO_NUM_22,
-  GPIO_NUM_23
+static estado_atuador_t mapa_atuadores[MAX_ATUADORES + 1] = {
+  {0},
+  { .gpio = GPIO_NUM_18},
+  { .gpio = GPIO_NUM_19},
+  { .gpio = GPIO_NUM_22},
+  { .gpio = GPIO_NUM_23}
 };
 
 // Mapeia pinos GPIO de entrada para id dos sensores
@@ -188,10 +198,33 @@ int controle_gpio_ler_sensor(int id) {
 void controle_gpio_mudar_atuador(int id, int valor) {
   if((id > 0) && (id <= MAX_ATUADORES)) {
     if ((valor >= 0) && (valor <= 1)) {
-      gpio_set_level(mapa_atuadores[id], valor);
+    mapa_atuadores[id].tempo_restante = 0;
+      mapa_atuadores[id].valor = valor;
+      gpio_set_level(mapa_atuadores[id].gpio, valor);
     }
   }
 }
+
+
+void controle_gpio_alternar_atuador(int id) {
+  if((id > 0) && (id <= MAX_ATUADORES)) {
+    int novo_valor = 1 - mapa_atuadores[id].valor; 
+
+    mapa_atuadores[id].tempo_restante = 0;
+    mapa_atuadores[id].valor = novo_valor;
+    gpio_set_level(mapa_atuadores[id].gpio, novo_valor);
+  }
+}
+
+
+void controle_gpio_pulsar_atuador(int id, int duracao) {
+  if((id > 0) && (id <= MAX_ATUADORES)) {
+    mapa_atuadores[id].tempo_restante = duracao;
+    mapa_atuadores[id].valor = 1;
+    gpio_set_level(mapa_atuadores[id].gpio, 1);
+  }
+}
+
 
 bool controle_gpio_reconfig(void) {
   // Um pino é usado para forçar modo Soft AP, com ssid de fábrica e senha vazia.

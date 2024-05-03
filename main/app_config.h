@@ -2,9 +2,17 @@
 */
 #pragma once
 
-#define MAX_SSID_LEN 32         ///< Tamanho máximo do ssid
-#define MAX_PASSWORD_LEN 63     ///< Tamanho máximo da senha
-#define MAX_HOSTNAME_LEN 63     ///< Tamanho máximo do nome do servidor
+#define MAX_SSID_LEN 32         ///< Tamanho máximo do ssid.
+#define MAX_PASSWORD_LEN 63     ///< Tamanho máximo da senha.
+#define MAX_HOSTNAME_LEN 63     ///< Tamanho máximo do nome do servidor.
+
+
+/** Modo da conexão Wifi (STAtion ou Access Point).
+ */
+enum modo_conexao_wifi {
+  MODO_WIFI_STA,
+  MODO_WIFI_AP
+};
 
 
 /** Ler configuração do aplicativo da memória FLASH.
@@ -22,9 +30,9 @@ void app_config_ler(void);
 esp_err_t app_config_gravar(void);
 
 
-/** Indica se modo Wifi deve ser Access Point (AP)
+/** Indica se modo Wifi deve ser Access Point (AP) ou Station (STA)
 */
-bool app_config_softap(void);
+enum modo_conexao_wifi app_config_modo_wifi(void);
 
 
 /** Obtém ssid da conexão Wifi.
@@ -44,9 +52,9 @@ const char *app_config_hostname(void);
 
 /** Altera modo da conexão Wifi.
 
-    @param modo 0 para modo Station, outro para modo Access Point
+    @param modo "STA" para modo Station, ou "AP" para modo Access Point
 */
-void app_config_set_softap(int modo);
+void app_config_set_modo_wifi(const char *modo);
 
 
 /** Altera ssid da conexão Wifi.

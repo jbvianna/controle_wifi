@@ -3,14 +3,19 @@
  *  Este aplicativo cria um protocolo para controle de um módulo
  *  esp32 utilizando uma conexão Wifi e um servidor HTTP.
  
-    Author: Joao Vianna (jvianna@gmail.com)
-
-    Version: 0.8
+    @author Joao Vianna (jvianna@gmail.com)
+    @version 0.82
 
     Base do código - Exemplos da biblioteca esp-idf
     
-    @see app_web_server.c Protocolo HTTP no arquivo.
-    @see controle_gpio.c Interface com o micro-controlador no arquivo.
+    @see app_web_server.c Protocolo HTTP para controlar os periféricos.
+    @see controle_gpio.c Interface com o micro-controlador.
+          
+    https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/protocols/mdns.html
+    https://docs.espressif.com/projects/esp-protocols/mdns/docs/latest/en/index.html
+
+    @todo Telas HTML embutidas na memória flash, para testar e configurar.
+    @todo Melhorar documentação de instalação, e desenvolvimento do servidor e cliente.
  */
  
  /*
@@ -31,10 +36,8 @@
       20240422 - Versão 0.5, código do cliente Wifi separado em outro módulo.
       20240427 - Versão 0.7, configuração no FLASH, modo Wifi configurável: AP ou STA
       20240428 - Versão 0.8, gravando configuração
+      20240503 - Versão 0.82, usando mDNS para resolver nome do servidor
 
-    Known problems, improvements needed...
-      Telas HTML embutidas, para testar e configurar.
-      Documentação de uso e do software
  */
 
 #include <stdio.h>
@@ -180,7 +183,7 @@ void app_main(void)
   iniciar_mdns(app_config_hostname());
 #endif
 
-  if (app_config_softap()) {
+  if (app_config_modo_wifi() == MODO_WIFI_AP) {
     ESP_LOGI(TAG, "Iniciando Wifi Soft Access Point");
     wifi_init_softap(app_config_wifi_ssid());
 

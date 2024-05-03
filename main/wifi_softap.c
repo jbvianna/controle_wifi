@@ -6,6 +6,9 @@
     NOTA: Houve modificações do código original do exemplo conforme outros
           exemplos encontrados na Internet para permitir o uso juntamente
           com um servidor HTTP.
+          
+    @todo Usar mDNS para publicar nome do servidor. Até esta versão, em modo AP,
+          o IP do servidor é fixo (192.168.0.10).
  */
 
 /*  WiFi softAP Example
