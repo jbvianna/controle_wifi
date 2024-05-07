@@ -8,11 +8,11 @@
 enum periferico {
   PRF_NDEF,                     ///< Periférico não definido.
   PRF_ATUADOR,                  ///< Atuador binário (0 - Off, 1 - On).
-  PRF_ALARME,                   ///< Alarme (contador de eventos).
+  PRF_CONTADOR,                 ///< Contador de eventos (Alarme).
   PRF_SENSOR                    ///< Sensor binário (0 - Off, 1 - On).
 };
 
-#define MAX_ALARMES     1       ///< Máximo de alarmes no módulo.
+#define MAX_CONTADORES  1       ///< Máximo de contadores no módulo.
 #define MAX_ATUADORES   4       ///< Máximo de atuadores no módulo.
 #define MAX_SENSORES    2       ///< Máximo de sensores no módulo.
 
@@ -22,6 +22,12 @@ enum periferico {
     que age sobre os diversos periféricos.
 */
 void controle_gpio_iniciar(void);
+
+
+/** Ativa um timer de baixa frequencia para controlar contadores e
+    a duração dos pulsos nos atuadores. 
+ */
+bool controle_gpio_ativar_timer(void);
 
 
 /** Obter status da placa controladora.
@@ -40,6 +46,27 @@ const char *controle_gpio_status(void);
     @todo Acrescentar sensores do tipo ADC, com valores inteiros.
 */
 int controle_gpio_ler_sensor(int id);
+
+
+/** Ler contagem de eventos de um contador
+
+    Os eventos são disparados por uma transição de nível alto para
+    nível baixo no pino do contador, que é iniciado como entrada
+    com PULL_UP interno, para simplificar os circuitos eletrônicos.
+
+    @param id Identificador do contador (de 1 a MAX_CONTADORES)
+
+    @return a contagem
+*/
+int controle_gpio_ler_contador(int id);
+
+
+/** Reiniciar a contagem de um contador para zero.
+
+    @param id     Identificador do contador (de 1 a MAX_CONTADORES)
+*/
+void controle_gpio_reiniciar_contador(int id);
+
 
 /** Mudar o valor de um atuador.
 

@@ -107,10 +107,10 @@ F 3 "~" H 3570 4080 50  0001 C CNN
 	0    1    1    0   
 $EndComp
 $Comp
-L Transistor_BJT:BC548 Q?
+L Transistor_BJT:BC548 Q1
 U 1 1 66211FE8
 P 3030 4080
-F 0 "Q?" H 3221 4126 50  0000 L CNN
+F 0 "Q1" H 3221 4126 50  0000 L CNN
 F 1 "BC548" H 3221 4035 50  0000 L CNN
 F 2 "Package_TO_SOT_THT:TO-92_Inline" H 3230 4005 50  0001 L CIN
 F 3 "https://www.onsemi.com/pub/Collateral/BC550-D.pdf" H 3030 4080 50  0001 L CNN
@@ -131,7 +131,7 @@ F 3 "https://www.omron.com/ecb/products/pdf/en-g5q.pdf" H 2730 3180 50  0001 L C
 	-1   0    0    -1  
 $EndComp
 Wire Wire Line
-	2930 3480 2930 3880
+	2930 3480 2930 3620
 $Comp
 L power:GNDREF #PWR?
 U 1 1 6622A2A9
@@ -160,7 +160,7 @@ F 3 "" H 2930 2580 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 Wire Wire Line
-	2930 2580 2930 2880
+	2930 2580 2930 2780
 Wire Wire Line
 	3720 4080 4890 4080
 Wire Wire Line
@@ -356,4 +356,29 @@ Wire Wire Line
 Connection ~ 3300 6000
 Wire Wire Line
 	3300 6000 3300 6110
+$Comp
+L Device:D_Schottky D1
+U 1 1 6638997C
+P 3860 3160
+F 0 "D1" V 3814 3240 50  0000 L CNN
+F 1 "1S20" V 3905 3240 50  0000 L CNN
+F 2 "" H 3860 3160 50  0001 C CNN
+F 3 "~" H 3860 3160 50  0001 C CNN
+	1    3860 3160
+	0    1    1    0   
+$EndComp
+Wire Wire Line
+	3860 3010 3860 2780
+Wire Wire Line
+	3860 2780 2930 2780
+Connection ~ 2930 2780
+Wire Wire Line
+	2930 2780 2930 2880
+Wire Wire Line
+	3860 3310 3860 3620
+Wire Wire Line
+	3860 3620 2930 3620
+Connection ~ 2930 3620
+Wire Wire Line
+	2930 3620 2930 3880
 $EndSCHEMATC

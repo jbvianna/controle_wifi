@@ -4,7 +4,7 @@
     sensores, etc, utilizando um protocolo HTTP com o servidor.
     
     @author João Vianna (jvianna@gmail.com)
-    @version 0.82
+    @version 0.85
 
     As solicitações seguem o protocolo:
     
@@ -17,6 +17,17 @@
       Para ler o estado de um sensor (porta de entrada do módulo),
       Onde id indica o sensor para o qual se deseja obter o valor.
       
+    GET /contador?id=(identificador)
+    
+      Para ler a contagem de eventos de um contador (porta de entrada do módulo),
+      Onde id indica o contador para o qual se deseja obter o valor.
+      
+    POST /contador(id)
+    
+      action=reset
+      
+      Para reiniciar a contagem de um contador.
+
     POST /atuador(id)
     
       action=("off", "on", "toggle" ou "pulse")
@@ -39,8 +50,9 @@
     Derivado de Simple HTTPD Server Example e RESTful Server
     
     Histórico:
-      - Versão 0.82 modificação do protocolo, aproximando-se mais do modelo RESTful,
-        com a diferença de que o conteúdo das mensagens é em texto (text/plain).            
+      - Versão 0.82 Modificação do protocolo, aproximando-se mais do modelo RESTful,
+        com a diferença de que o conteúdo das mensagens é em texto (text/plain).
+      - Versão 0.85 Implementados contadores de eventos
 
     @see app_config.h
  */
@@ -333,10 +345,10 @@ static esp_err_t get_status_handler(httpd_req_t *req)
                     id_perif = atoi(param);
                 }
               }
-            if (httpd_query_key_value(buf, "al", param, sizeof(param)) == ESP_OK) {
+            if (httpd_query_key_value(buf, "cnt", param, sizeof(param)) == ESP_OK) {
                 ESP_LOGD(TAG, "Found URL query parameter => al=%s", param);
                 if (periferico == PRF_NDEF ) {
-                    periferico = PRF_ALARME;
+                    periferico = PRF_CONTADOR;
                     id_perif = atoi(param);
                 } else {
                     ESP_LOGE(TAG, "Apenas um periferico por vez!!!");
@@ -386,6 +398,196 @@ static const httpd_uri_t get_status_uri = {
 };
 
 
+/*  Trata GET /sensor?id=<identificador>.
+
+    Lê o valor de um sensor, retornando 0 se desligado e 1 se ligado.
+    id é o identificador do sensor a ser lido, começando de 1
+ */
+static esp_err_t get_sensor_handler(httpd_req_t *req)
+{
+  char*  buf;
+  size_t buf_len;
+  
+  int resposta = MSGL_OK;
+  
+  /* Read URL query string length and allocate memory for length + 1,
+   * extra byte for null termination */
+  buf_len = httpd_req_get_url_query_len(req) + 1;
+  if (buf_len > 1) {
+    buf = malloc(buf_len);
+
+    if (httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK) {
+      char param[32];
+
+      // ESP_LOGI(TAG, "Found URL query => %s", buf);
+
+      /* Obter id do sensor a ser lido */
+      if (httpd_query_key_value(buf, "id", param, sizeof(param)) == ESP_OK) {
+        int id_sensor = atoi(param);
+        int valor = controle_gpio_ler_sensor(id_sensor);
+        
+        // ESP_LOGI(TAG, "Valor do sensor %d: %d", id_sensor, valor);
+        
+        if (valor == 0 || valor == 1 ) {
+          // Nota: Apenas 0 e 1 são valores válidos nesta implementação.
+          resposta = valor_sensor_para_msg(valor);
+        }
+      } else {
+        resposta = MSGL_FALTAM_PARAMETROS;
+      }
+    }
+    free(buf);
+  } else {
+    resposta = MSGL_FALTAM_PARAMETROS;
+  }
+
+  // Preparar cabeçalhos da resposta
+  preencher_cabecalho_text_plain(req);
+
+  if (resposta > MSGL_OK) {
+    httpd_resp_set_status(req, "400 BAD REQUEST");
+  }
+  httpd_resp_send(req, mensagens_locais[resposta], HTTPD_RESP_USE_STRLEN);
+  return ESP_OK;
+}
+
+
+static const httpd_uri_t get_sensor_uri = {
+    .uri       = "/sensor",
+    .method    = HTTP_GET,
+    .handler   = get_sensor_handler,
+    .user_ctx  = &rest_context
+};
+
+
+/*  Trata GET /contador?id=<identificador>.
+
+    Lê a contagem de eventos de um contador.
+    id é o identificador do contador a ser lido, começando de 1
+ */
+static esp_err_t get_contador_handler(httpd_req_t *req)
+{
+  char*  buf;
+  size_t buf_len;
+  
+  int status =  MSGL_OK;
+  char*  resposta = ((rest_server_context_t *)(req->user_ctx))->scratch;
+  
+  /* Read URL query string length and allocate memory for length + 1,
+   * extra byte for null termination */
+  buf_len = httpd_req_get_url_query_len(req) + 1;
+  if (buf_len > 1) {
+    buf = malloc(buf_len);
+
+    if (httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK) {
+      char param[32];
+
+      /* Obter id do contador a ser lido */
+      if (httpd_query_key_value(buf, "id", param, sizeof(param)) == ESP_OK) {
+        int id_contador = atoi(param);
+        int valor = controle_gpio_ler_contador(id_contador);
+        
+        // ESP_LOGI(TAG, "Valor do contador %d: %d", id_contador, valor);
+
+        snprintf(resposta, SCRATCH_BUFSIZE, "%d\n", valor);       
+      } else {
+        status = MSGL_FALTAM_PARAMETROS;
+      }
+    }
+    free(buf);
+  } else {
+    status = MSGL_FALTAM_PARAMETROS;
+  }
+
+  // Preparar cabeçalhos da resposta
+  preencher_cabecalho_text_plain(req);
+
+  if (status > MSGL_OK) {
+    resposta = "\n";
+    httpd_resp_set_status(req, mensagens_locais[status]);
+  }
+  httpd_resp_send(req, resposta, HTTPD_RESP_USE_STRLEN);
+  return ESP_OK;
+}
+
+
+static const httpd_uri_t get_contador_uri = {
+    .uri       = "/contador",
+    .method    = HTTP_GET,
+    .handler   = get_contador_handler,
+    .user_ctx  = &rest_context
+};
+
+
+/*  Trata POST /contador(id)
+
+    action=reset
+
+    Reinicia a contagem de eventos.
+    id é o identificador do contador, começando em 1.
+
+    Parâmetros:
+      id_perif - identificador do periférico.
+      req - requisição de serviço vinda do cliente.
+ */
+static esp_err_t post_contador_n_handler(int id_perif, httpd_req_t *req) {
+  // Prepara área de rascunho
+  char*  buf = ((rest_server_context_t *)(req->user_ctx))->scratch;
+  char*  saved_ptr;
+  
+  bool aplicar_reset = false;
+  
+  int resposta = MSGL_CREATED;
+  
+  int received = ler_conteudo_post(req, buf, SCRATCH_BUFSIZE);
+  
+  if (received < 0) {
+    return ESP_FAIL;
+  }
+  
+  // Percorrendo linhas do conteúdo
+  char *linha = strtok_r(buf, "\n", &saved_ptr);
+  
+  while (linha != NULL) {
+
+    if (strcmp(linha, "action=reset") == 0) {
+      aplicar_reset = true;
+
+      // ESP_LOGI(TAG, "Ação sobre contador: reset");
+    } else if (strlen(linha) > 0) {
+      ESP_LOGE(TAG, "Parâmetro desconhecido por contador: %s", linha);
+    }
+    linha = strtok_r(NULL, "\n", &saved_ptr);
+  }
+
+  if (aplicar_reset) {
+        controle_gpio_reiniciar_contador(id_perif);
+  }
+  // Preparar cabeçalhos da resposta
+  preencher_cabecalho_text_plain(req);
+
+  if (resposta >= MSGL_OK) {
+    httpd_resp_set_status(req, mensagens_locais[resposta]);
+  }
+  httpd_resp_sendstr(req, mensagens_locais[resposta]);
+  return ESP_OK;
+}
+
+
+static esp_err_t post_contador1_handler(httpd_req_t *req) {
+  return post_contador_n_handler(1, req);
+}
+
+
+static const httpd_uri_t post_contador1_uri = {
+    .uri       = "/contador1",
+    .method    = HTTP_POST,
+    .handler   = post_contador1_handler,
+    .user_ctx  = &rest_context
+};
+
+
+// Tratamento de Atuadores ----------------------------------------------------
 enum acao_atuador {
   ACAO_ATUADOR_OFF,             // Esta deve ser sempre a primeira
   ACAO_ATUADOR_ON,
@@ -545,68 +747,6 @@ static const httpd_uri_t post_atuador4_uri = {
 };
 
 
-/*  Trata GET /sensor?id=<identificador>.
-
-    Lê o valor de um sensor, retornando 0 se desligado e 1 se ligado.
-    id é o identificador do sensor a ser lido, começando de 1
- */
-static esp_err_t get_sensor_handler(httpd_req_t *req)
-{
-  char*  buf;
-  size_t buf_len;
-  
-  int resposta = MSGL_OK;
-  
-  /* Read URL query string length and allocate memory for length + 1,
-   * extra byte for null termination */
-  buf_len = httpd_req_get_url_query_len(req) + 1;
-  if (buf_len > 1) {
-    buf = malloc(buf_len);
-
-    if (httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK) {
-      char param[32];
-
-      // ESP_LOGI(TAG, "Found URL query => %s", buf);
-
-      /* Obter id do sensor a ser lido */
-      if (httpd_query_key_value(buf, "id", param, sizeof(param)) == ESP_OK) {
-        int id_sensor = atoi(param);
-        int valor = controle_gpio_ler_sensor(id_sensor);
-        
-        // ESP_LOGI(TAG, "Valor do sensor %d: %d", id_sensor, valor);
-        
-        if (valor == 0 || valor == 1 ) {
-          // Nota: Apenas 0 e 1 são valores válidos nesta implementação.
-          resposta = valor_sensor_para_msg(valor);
-        }
-      } else {
-        resposta = MSGL_FALTAM_PARAMETROS;
-      }
-    }
-    free(buf);
-  } else {
-    resposta = MSGL_FALTAM_PARAMETROS;
-  }
-
-  // Preparar cabeçalhos da resposta
-  preencher_cabecalho_text_plain(req);
-
-  if (resposta > MSGL_OK) {
-    httpd_resp_set_status(req, "400 BAD REQUEST");
-  }
-  httpd_resp_send(req, mensagens_locais[resposta], HTTPD_RESP_USE_STRLEN);
-  return ESP_OK;
-}
-
-
-static const httpd_uri_t get_sensor_uri = {
-    .uri       = "/sensor",
-    .method    = HTTP_GET,
-    .handler   = get_sensor_handler,
-    .user_ctx  = &rest_context
-};
-
-
 /*  Trata POST /config
 
     ssid=<ssid do Wifi>
@@ -732,6 +872,8 @@ httpd_handle_t start_webserver(void)
       ESP_LOGI(TAG, "Registering URI handlers");
       httpd_register_uri_handler(server, &get_status_uri);
       httpd_register_uri_handler(server, &get_sensor_uri);
+      httpd_register_uri_handler(server, &get_contador_uri);
+      httpd_register_uri_handler(server, &post_contador1_uri);
       httpd_register_uri_handler(server, &post_atuador1_uri);
       httpd_register_uri_handler(server, &post_atuador2_uri);
       httpd_register_uri_handler(server, &post_atuador3_uri);

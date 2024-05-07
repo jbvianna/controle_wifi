@@ -17,6 +17,8 @@ const telaConfig = document.getElementById('id-tela-config');
 const btAbrir = document.getElementById('id-abrir');
 const btFechar = document.getElementById('id-fechar');
 const btSirene = document.getElementById('id-sirene');
+const btPararSirene = document.getElementById('id-parar-sirene');
+const btReiniciarContagem = document.getElementById('id-reiniciar-contagem');
 const btRefletor = document.getElementById('id-refletor');
 const btMudarURI = document.getElementById('id-mudar-uri');
 
@@ -32,6 +34,7 @@ const txSenha = document.getElementById('id-password');
 const txHostname = document.getElementById('id-hostname');
 
 // Mensagens
+const txContagem = document.getElementById('tx-contagem');
 const txCampainha = document.getElementById('tx-campainha');
 const txPorta = document.getElementById('tx-porta');
 const txResultados = document.getElementById('tx-resultados');
@@ -103,7 +106,7 @@ function objetoParaListaParametros(objeto) {
   let parametros = [];
   
   for (let chave in objeto) {
-    parametros.push(chave + '=' + objeto[chave]);
+    parametros.push(chave + '=' + objeto[chave].toString());
   }
   return parametros;
 }
@@ -165,6 +168,94 @@ class Sensor {
 }
 
 
+/** Classe que modela um Sensor do micro-controlador
+ */
+class Contador {
+  constructor(id) {
+    this.servidor = '';                 // Servidor para onde são dirigidas as solicitações
+    this.id = id;                       // Identificador do periférico no servidor
+    this.contagem = 0;                     // Cópia do valor lido no micro-controlador
+  }
+  
+  obterContagem() {
+    return this.contagem;
+  }
+  
+  mudarServidor(serv) {
+    this.servidor = serv;
+  }
+
+  // Para uso interno no método ler()  
+  mudarContagem(cont) {
+    this.contagem = cont;
+  }
+  
+  /** Envia um comando GET /contador?id=(id) para o servidor.
+  
+      O valor lido do contador é guardado internamente de acordo com a resposta recebida.
+   */
+  ler() {
+    if (this.servidor == '') {
+      // Se não sabe quem é o servidor...
+      return;
+    }
+    var xhttp = new XMLHttpRequest();
+    
+    var comando = this.servidor + 'contador?id=' + this.id;
+    
+    var euMesmo = this;
+    xhttp.onreadystatechange = function() {
+      if (this.readyState == 4) {
+        if (this.status == 200) {
+          euMesmo.mudarContagem(parseInt(this.responseText));
+          // console.log('Contagem lida: ' + this.responseText);
+        } else {
+          console.log('Erro Contador::ler() ' + this.status.toString() + ' - ' + this.statusText);
+        }
+      }
+    };
+    // console.log('Contador::ler() enviando comando: ' + comando);
+    
+    xhttp.open('GET', comando, true);
+    xhttp.send();
+  }
+
+  /** Envia um comando POST /contador(id) para o servidor.
+  
+      O conteúdo "action=reset\n" faz com que a contagem reinicie de zero.
+   */
+  reiniciar() {
+    if (this.servidor == '') {
+      // Se não sabe quem é o servidor...
+      return;
+    }
+    var xhttp = new XMLHttpRequest();
+    
+    var cmd = {};
+    
+    cmd.action = 'reset';
+    
+    var conteudo = objetoParaListaParametros(cmd).join('\n');
+  
+    xhttp.onload = function() {
+      if (this.readyState == 4) {
+        if (this.status >= 200 && status <= 204) {
+          // console.log('Sucesso ' + this.statusText);
+        } else {
+          console.log('Erro Contador::enviarComando ' + this.status.toString() + ' - ' + this.statusText);
+        }
+      }
+    };
+   
+    xhttp.open('POST', this.servidor + 'contador' + this.id);
+    xhttp.setRequestHeader("Content-Type", "text/plain; charset=UTF-8")
+    xhttp.send(conteudo);
+    
+    this.contagem = 0;
+  }
+}
+
+
 /** Classe que modela um Atuador do micro-controlador
  */
 class Atuador {
@@ -208,7 +299,7 @@ class Atuador {
     cmd.action = acao;
     
     if (acao == 'pulse') {
-      cmd.duracao = this.duracao;
+      cmd.duration = this.duracao;
     }
     var conteudo = objetoParaListaParametros(cmd).join('\n');
   
@@ -249,12 +340,6 @@ class Atuador {
 }
 
 
-// Para contar por quanto tempo cada atuador permanece ligado (AFAZER - Mudar lógica para o servidor)
-var abrindoCancela = 0;
-var fechandoCancela = 0;
-var soandoSirene = 0;
-
-
 // Sensores no circuito do ESP_32
 
 // Sensor de id "1" é uma campainha
@@ -264,9 +349,12 @@ var campainha = new Sensor("1");
 var portaAberta = new Sensor("2");
 
 
+// Contador de id "1" para contar veículos
+var contadorVeiculos = new Contador("1");
+
 // Atuadores no circuito do ESP_32
 
-// Atuador de id "1" é um botão que deverá aceita comandos "pulse" (AFAZER)
+// Atuador de id "1" é um botão que aceita comandos "pulse"
 var atAbrirCancela = new Atuador("1");
 
 var atFecharCancela = new Atuador("2");
@@ -281,8 +369,8 @@ var refletor = new Atuador("4");
 /** Enviar comando para o atuador que controla a cancela para abri-la.
  */
 function abrirCancela(evento) {
-  atAbrirCancela.ligar();
-  abrindoCancela = 2;
+  atAbrirCancela.mudarDuracao(500);  // Pulsar botão por meio segundo
+  atAbrirCancela.pulsar();
 }
 
 btAbrir.addEventListener('click', abrirCancela);
@@ -291,35 +379,30 @@ btAbrir.addEventListener('click', abrirCancela);
 /** Enviar comando para o atuador que controla a cancela para fechá-la.
  */
 function fecharCancela(evento) {
-  atFecharCancela.ligar();
-  fechandoCancela = 2;
+  atFecharCancela.mudarDuracao(500);  // Pulsar botão por meio segundo
+  atFecharCancela.pulsar();
 }
 
 btFechar.addEventListener('click', fecharCancela);
+
+
+/** Trata botão que controla a sirene. 
+ */
+function tratarSirene(evento) {
+  sirene.mudarDuracao(3000);  // Tocar sirene por 3 segundos
+  sirene.pulsar();
+}
+
+btSirene.addEventListener('click', tratarSirene);
 
 
 /** Forçar silêncio na sirene
  */
 function pararSirene() {
   sirene.desligar();
-  btSirene.value = 'Soar Sirene';
-  soandoSirene = 0;
 }
 
-
-/** Trata botão que controla a sirene (toggle). 
- */
-function tratarSirene(evento) {
-  if (soandoSirene > 0) {
-    pararSirene();
-  } else {
-    sirene.ligar();
-    btSirene.value = 'Parar Sirene';
-    soandoSirene = 5;
-  }
-}
-
-btSirene.addEventListener('click', tratarSirene);
+btPararSirene.addEventListener('click', pararSirene);
 
 
 /** Trata botão que controla o refletor (toggle). 
@@ -335,6 +418,15 @@ function tratarRefletor(evento) {
 }
 
 btRefletor.addEventListener('click', tratarRefletor);
+
+
+/** Reinicia a contagem de veículos
+*/
+function reiniciarContagem() {
+  contadorVeiculos.reiniciar();
+}
+
+btReiniciarContagem.addEventListener('click', reiniciarContagem);
 
 
 /* Comunicação com o servidor
@@ -402,26 +494,9 @@ btSalvar.addEventListener('click', salvarConfig);
 
 function refrescarTela() {
   if (servidorConectado) {
-    if (abrindoCancela > 0) {
-      abrindoCancela -= 1;
-      if (abrindoCancela <= 0) {
-        atAbrirCancela.desligar();
-      }
-    }
-    if (fechandoCancela > 0) {
-      fechandoCancela -= 1;
-      if (fechandoCancela <= 0) {
-        atFecharCancela.desligar();
-      }
-    }
-    if (soandoSirene > 0) {
-      soandoSirene -= 1;
-      if (soandoSirene <= 0) {
-        pararSirene();
-      }
-    }
     campainha.ler();
     portaAberta.ler();
+    contadorVeiculos.ler();
     
     if (campainha.obterValor() == 0) {
       // Campainha está acionada
@@ -435,6 +510,8 @@ function refrescarTela() {
     } else {
       txPorta.style = "display: none;";
     }
+    txContagem.innerHTML = contadorVeiculos.obterContagem();
+
     mostrarResultados();
   } else {
     verificarConexao();
@@ -447,10 +524,7 @@ var refrescandoTela = false;
 
 function reiniciarControlador() {
   atAbrirCancela.desligar();
-  abrindoCancela = 0;
-
   atFecharCancela.desligar();
-  fechandoCancela = 0;
 
   pararSirene();
 }
@@ -520,6 +594,8 @@ function suspenderTela() {
 function atualizarServPerifericos() {
   campainha.mudarServidor(txURI.value); 
   portaAberta.mudarServidor(txURI.value);
+  
+  contadorVeiculos.mudarServidor(txURI.value);
 
   atAbrirCancela.mudarServidor(txURI.value);
   atFecharCancela.mudarServidor(txURI.value);  
