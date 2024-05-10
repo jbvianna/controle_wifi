@@ -87,7 +87,6 @@
 #include "esp_vfs.h"
 // #include "cJSON.h"
 
-#include "utilitarios.h"
 #include "controle_gpio.h"
 #include "app_config.h"
 #include "app_web_server.h"
@@ -623,7 +622,9 @@ static esp_err_t post_atuador_n_handler(int id_perif, httpd_req_t *req) {
   // Prepara área de rascunho
   char*  buf = ((rest_server_context_t *)(req->user_ctx))->scratch;
   char*  saved_ptr;
-  char*  param;
+
+  char   param[16];
+  char   valor[16];
   
   int acao = ACAO_ATUADOR_NOP;
   int duracao = 0;
@@ -641,24 +642,27 @@ static esp_err_t post_atuador_n_handler(int id_perif, httpd_req_t *req) {
   
   while (linha != NULL) {
 
-    if (str_startswith(linha, "action=")) {
-      param = linha + 7;
-      // ESP_LOGI(TAG, "Ação sobre atuador: %s", param);
-      
-      acao = ACAO_ATUADOR_OFF;    // Começa da primeira ação conhecida
-      
-      while (acao < ACAO_ATUADOR_NOP) {
-        if (strcmp(acoes_conhecidas[acao], param) == 0) {
-          break;
-        }
-        acao++;
-      }      
-    } else if (str_startswith(linha, "duration=")) {
-      param = linha + 9;
-      // ESP_LOGI(TAG, "Duração: %s", param);
-      duracao = atoi(param);
-    } else if (strlen(linha) > 0) {
-      ESP_LOGE(TAG, "Parâmetro desconhecido por atuador: %s", linha);
+    // Lê diretivas do tipo 'param = valor'
+    int count = sscanf(linha, "%15[^= ] = %15[^\n]", param, valor);
+    
+    if (count == 2) {
+      if (strcmp(param, "action") == 0) {
+        // ESP_LOGI(TAG, "Ação sobre atuador: %s", param);
+        
+        acao = ACAO_ATUADOR_OFF;    // Começa da primeira ação conhecida
+        
+        while (acao < ACAO_ATUADOR_NOP) {
+          if (strcmp(acoes_conhecidas[acao], valor) == 0) {
+            break;
+          }
+          acao++;
+        }      
+      } else if (strcmp(param, "duration") == 0) {
+        // ESP_LOGI(TAG, "Duração: %s", valor);
+        duracao = atoi(valor);
+      } else if (strlen(linha) > 0) {
+        ESP_LOGE(TAG, "Parâmetro desconhecido por atuador: %s", linha);
+      }
     }
     linha = strtok_r(NULL, "\n", &saved_ptr);
   }
@@ -760,7 +764,9 @@ static esp_err_t post_config_handler(httpd_req_t *req)
 {
   char*  buf = ((rest_server_context_t *)(req->user_ctx))->scratch;
   char*  saved_ptr;
-  char*  param;
+
+  char   param[16];
+  char   valor[64];
 
   int resposta = MSGL_CREATED;
   
@@ -774,25 +780,32 @@ static esp_err_t post_config_handler(httpd_req_t *req)
   char *linha = strtok_r(buf, "\n", &saved_ptr);
   
   while (linha != NULL) {
-
-    if (str_startswith(linha, "ssid=")) {
-      param = linha + 5;
-      // ESP_LOGI(TAG, "Novo ssid: %s", param);
-      app_config_set_wifi_ssid(param);
-    } else if (str_startswith(linha, "password=")) {
-      param = linha + 9;
-      // ESP_LOGI(TAG, "Nova senha: %s", param);
-      app_config_set_wifi_password(param);
-    } else if (str_startswith(linha, "hostname=")) {
-      param = linha + 9;
-      // ESP_LOGI(TAG, "Novo hostname: %s", param);
-      app_config_set_hostname(param);
-    } else if (str_startswith(linha, "modo_wifi=")) {
-      param = linha + 10;
-      // ESP_LOGI(TAG, "Modo Wifi: %s", param);
-      app_config_set_modo_wifi(param);
-    } else if (strlen(linha) > 0) {
-      ESP_LOGE(TAG, "Parâmetro de configuração desconhecido: %s", linha);
+    // @todo Mesmo fragmento de código em app_config.cpp. Deveria ser fatorado em função.
+    // Linhas de configuração válidas são da forma: nome = valor
+    int count = sscanf(linha, "%16[^= ] = %63[^\n]", param, valor);
+    
+    if(count > 1) {
+      if (strcmp(param, "password") == 0) {
+        if (count == 1) {
+          // Senha pode ser vazia
+          valor[0] = 0;
+        }
+      // ESP_LOGI(TAG, "Nova senha: '%s'", valor);
+        app_config_set_wifi_password(valor);
+      } else if (count == 2) {
+        if (strcmp(param, "ssid") == 0) {
+        // ESP_LOGI(TAG, "Novo ssid: '%s'", valor);
+          app_config_set_wifi_ssid(valor);
+        } else if (strcmp(param, "hostname") == 0) {
+          // ESP_LOGI(TAG, "Novo hostname: %s", valor);
+          app_config_set_hostname(valor);
+        } else if (strcmp(param, "modo_wifi") == 0) {
+          // ESP_LOGI(TAG, "Modo Wifi: %s", valor);
+          app_config_set_modo_wifi(valor);
+        }
+      } else if (strlen(linha) > 0) {
+        ESP_LOGE(TAG, "Parâmetro de configuração desconhecido: %s", linha);
+      }
     }
     linha = strtok_r(NULL, "\n", &saved_ptr);
   }

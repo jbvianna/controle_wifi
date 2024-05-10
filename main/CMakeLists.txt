@@ -1,4 +1,4 @@
-idf_component_register(SRCS "main.c" "controle_gpio.c" "wifi_station.c" "wifi_softap.c" "app_web_server.c" "app_config.c" "utilitarios.c"
+idf_component_register(SRCS "main.c" "controle_gpio.c" "wifi_station.c" "wifi_softap.c" "app_web_server.c" "app_config.c"
                     INCLUDE_DIRS ".")
 
 # Note: you must have a partition named the first argument (here it's "littlefs")

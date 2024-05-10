@@ -2,9 +2,8 @@
 */
 #pragma once
 
-#define MAX_SSID_LEN 32         ///< Tamanho máximo do ssid.
-#define MAX_PASSWORD_LEN 63     ///< Tamanho máximo da senha.
-#define MAX_HOSTNAME_LEN 63     ///< Tamanho máximo do nome do servidor.
+#define MAX_SSID_LEN 32
+#define MAX_CFG_VALUE_LEN 63
 
 
 /** Modo da conexão Wifi (STAtion ou Access Point).
@@ -70,7 +69,7 @@ void app_config_set_wifi_ssid(const char *ssid);
 /** Altera senha conexão Wifi.
 
     @param pwd senha a utilizar
-    @see MAX_PASSWORD_LEN
+    @see MAX_CFG_VALUE_LEN
     
     NOTA: Se o tamanho do parâmetro exceder o limite, nada será alterado.
 */
@@ -80,7 +79,7 @@ void app_config_set_wifi_password(const char *pwd);
 /** Altera o nome do servidor HTTP (mDNS).
 
     @param nome Nome do servidor
-    @see MAX_HOSTNAME_LEN
+    @see MAX_CFG_VALUE_LEN
  */
 void app_config_set_hostname(const char *nome);
 

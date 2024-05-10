@@ -43,11 +43,11 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <esp_err.h>
-#include <esp_log.h>
-#include <esp_littlefs.h>
 
-#include "utilitarios.h"
+#include "esp_err.h"
+#include "esp_log.h"
+#include "esp_littlefs.h"
+
 #include "controle_gpio.h"
 #include "app_config.h"
 
@@ -100,18 +100,21 @@ static void terminar_littlefs() {
 }
 
 
+#define MAX_CFG_PARAM_LEN 31
+
 static const char* nomes_modo_wifi[2] = {
   "STA",
   "AP"
 };
 
+
 /*  Estrutura de configuração específica do aplicativo
  */
 typedef struct {
   char wifi_ssid[MAX_SSID_LEN + 1];             // Identificador do serviço Wifi
-  char wifi_password[MAX_PASSWORD_LEN + 1];     // Senha do Wifi
+  char wifi_password[MAX_CFG_VALUE_LEN + 1];     // Senha do Wifi
 
-  char hostname[MAX_HOSTNAME_LEN + 1];          // Nome do servidor HTTP
+  char hostname[MAX_CFG_VALUE_LEN + 1];          // Nome do servidor HTTP
   int  modo_wifi;                               // Station ou AP
   
   bool  modified;                               // Indica se a configuração mudou
@@ -174,7 +177,7 @@ void app_config_set_wifi_ssid(const char *ssid) {
 void app_config_set_wifi_password(const char *pwd) {
   size_t len = strlen(pwd);
       
-  if (len <= MAX_PASSWORD_LEN ) {
+  if (len <= MAX_CFG_VALUE_LEN ) {
     ESP_LOGI(TAG, "Senha: '%s'", pwd);
     strcpy(app_config.wifi_password, pwd);
     app_config.modified = true;
@@ -185,7 +188,7 @@ void app_config_set_wifi_password(const char *pwd) {
 void app_config_set_hostname(const char *nome) {
   size_t len = strlen(nome);
       
-  if (len <= MAX_HOSTNAME_LEN ) {
+  if (len <= MAX_CFG_VALUE_LEN ) {
     ESP_LOGI(TAG, "Hostname: '%s'", nome);
     strcpy(app_config.hostname, nome);
     app_config.modified = true;
@@ -213,8 +216,8 @@ void app_config_ler(void) {
   FILE *f = fopen("/littlefs/config.txt", "r");
 
   char line[128];
-  
-  char *pos;
+  char param[MAX_CFG_PARAM_LEN + 1];
+  char value[MAX_CFG_VALUE_LEN + 1];
   
   if (f == NULL) {
     // Se arquivo principal apresenta falha, tenta backup.
@@ -227,30 +230,28 @@ void app_config_ler(void) {
     return;
   }
 
-  while(true) {
-    line[0] = '\0';
-
-    fgets(line, sizeof(line), f);
-
-    if(line[0] == '\n' || (line[0] == '\0')) {
-      // End of file
-      break;
-    }  
-    // strip newline
-    pos = strchr(line, '\n');
-    if (pos) {
-        *pos = '\0';
-    }
+  while(fgets(line, sizeof(line), f) != NULL) {
     // ESP_LOGI(TAG, "Read from file: '%s'", line);
     
-    if (str_startswith(line, "ssid=")) {
-      app_config_set_wifi_ssid(line + 5);
-    } else if (str_startswith(line, "password=")) {
-      app_config_set_wifi_password(line + 9);
-    } else if (str_startswith(line, "hostname=")) {
-      app_config_set_hostname(line + 9);
-    } else if (str_startswith(line, "modo_wifi=")) {
-      app_config_set_modo_wifi(line + 10);
+    // Linhas de configuração válidas são da forma: nome = valor
+    int count = sscanf(line, "%31[^= ] = %63[^\n]", param, value);
+    
+    if(count > 1) {
+      if (strcmp(param, "password") == 0) {
+        if (count == 1) {
+          // Senha pode ser vazia
+          value[0] = 0;
+        }
+        app_config_set_wifi_password(value);
+      } else if (count == 2) {
+        if (strcmp(param, "ssid") == 0) {
+          app_config_set_wifi_ssid(value);
+        } else if (strcmp(param, "hostname") == 0) {
+          app_config_set_hostname(value);
+        } else if (strcmp(param, "modo_wifi") == 0) {
+          app_config_set_modo_wifi(value);
+        }
+      }
     }
   }
   fclose(f);
